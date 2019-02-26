@@ -1,4 +1,4 @@
-package main // Copyright 2019 PaperCut Software International Pty Ltd. All rights reserved.
+package main
 
 import (
 	"flag"
