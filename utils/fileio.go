@@ -19,14 +19,14 @@ func MkDir(dir string) error {
 	_, err := os.Stat(dir)
 	if !os.IsNotExist(err) {
 		if err != nil {
-			fmt.Printf("MkDir: Stat failed. dir=%q err=%v", dir, err)
+			fmt.Fprintf(os.Stderr, "MkDir: Stat failed. dir=%q err=%v\n", dir, err)
 			return err
 		}
 		return nil
 	}
 	err = os.Mkdir(dir, 0777)
 	if err != nil {
-		fmt.Printf("MkDir: Mkdir failed. dir=%q err=%v", dir, err)
+		fmt.Fprintf(os.Stderr, "MkDir: Mkdir failed. dir=%q err=%v\n", dir, err)
 	}
 	return err
 }
@@ -35,7 +35,7 @@ func MkDir(dir string) error {
 func Exists(filename string) bool {
 	_, err := os.Stat(filename)
 	if err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Exists: Stat failed. filname=%q err=%v", filename, err)
+		fmt.Fprintf(os.Stderr, "Exists: Stat failed. filename=%q err=%v\n", filename, err)
 	}
 	return err == nil
 }
@@ -48,7 +48,7 @@ func WriteJsonSlice(filename string, vals []string) error {
 	whole := strings.Join(parts, "\n")
 	err := ioutil.WriteFile(filename, []byte(whole), 0777)
 	if err != nil {
-		fmt.Printf("WriteJsonSlice: WriteFile failed filename=%q err=%v", filename, err)
+		fmt.Fprintf(os.Stderr, "WriteJsonSlice: WriteFile failed filename=%q err=%v\n", filename, err)
 		return err
 	}
 	fmt.Printf("WriteJsonSlice: Saved %d entries to %q\n", len(vals), filename)
@@ -69,7 +69,8 @@ func ChangePathDirExt(inDir, inPath, outDir, outExt string) (string, error) {
 func ChangePathDir(inDir, inPath, outDir string) (string, error) {
 	rel, err := filepath.Rel(inDir, inPath)
 	if err != nil {
-		fmt.Printf("ChangePathDir: Rel failed. inPath=%q inDir=%q err=%v", inPath, inDir, err)
+		fmt.Fprintf(os.Stderr, "ChangePathDir: Rel failed. inPath=%q inDir=%q err=%v\n",
+			inPath, inDir, err)
 		return "", err
 	}
 	return filepath.Join(outDir, rel), nil

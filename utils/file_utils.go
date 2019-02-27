@@ -21,7 +21,7 @@ func PatternsToPaths(patternList []string, sortSize bool) ([]string, error) {
 		pattern = ExpandUser(pattern)
 		files, err := doublestar.Glob(pattern)
 		if err != nil {
-			fmt.Printf("PatternsToPaths: Glob failed. pattern=%#q err=%v", pattern, err)
+			fmt.Printf("PatternsToPaths: Glob failed. pattern=%#q err=%v\n", pattern, err)
 			return pathList, err
 		}
 		for _, filename := range files {

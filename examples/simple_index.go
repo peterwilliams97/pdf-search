@@ -10,12 +10,14 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-const repository = "store.simple"
+var store = "store.simple"
 
 func main() {
+	flag.StringVar(&store, "s", store, "Bleve store name. This is a directory.")
 	utils.MakeUsage(`Usage: go run simple_index.go [OPTIONS] PDF32000_2008.pdf
 Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`)
 	flag.Parse()
+	utils.SetLogging()
 	if utils.ShowHelp {
 		flag.Usage()
 		os.Exit(0)
@@ -27,17 +29,16 @@ Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to
 
 	pathList, err := utils.PatternsToPaths(flag.Args(), true)
 	if err != nil {
-		fmt.Printf("PatternsToPaths failed. args=%#q err=%v", flag.Args(), err)
+		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
 		os.Exit(1)
 	}
-	fmt.Printf("args=%d\n", len(flag.Args()))
-	fmt.Printf("pathList=%d\n", len(pathList))
+	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
 	// Create a new index.
 	mapping := bleve.NewIndexMapping()
-	index, err := bleve.New(repository, mapping)
+	index, err := bleve.New(store, mapping)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", repository)
+		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", store)
 		panic(err)
 	}
 
@@ -45,6 +46,7 @@ Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to
 	for _, inPath := range pathList {
 		err := indexDocPages(index, inPath)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not index %q.\n", inPath)
 			panic(err)
 		}
 		docCount, err := index.DocCount()
@@ -92,7 +94,7 @@ func extractDocPages(inPath string) ([]PdfPage, error) {
 
 	pdfReader, err := utils.PdfOpen(inPath)
 	if err != nil {
-		fmt.Printf("extractDocPages: Could not open inPath=%q. err=%v", inPath, err)
+		fmt.Printf("extractDocPages: Could not open inPath=%q. err=%v\n", inPath, err)
 		return nil, err
 	}
 	numPages, err := pdfReader.GetNumPages()
@@ -110,7 +112,7 @@ func extractDocPages(inPath string) ([]PdfPage, error) {
 		var text string
 		text, err = utils.ExtractPageText(page)
 		if err != nil {
-			fmt.Printf("extractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
+			fmt.Printf("extractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v\n",
 				inPath, pageNum, err)
 			return nil, err
 		}

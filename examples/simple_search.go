@@ -11,12 +11,14 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-const repository = "store.simple"
+var store = "store.simple"
 
 func main() {
+	flag.StringVar(&store, "s", store, "Bleve store name. This is a directory.")
 	utils.MakeUsage(`Usage: go run simple_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
 simple_index.go`)
+	utils.SetLogging()
 	flag.Parse()
 	if utils.ShowHelp {
 		flag.Usage()
@@ -31,9 +33,9 @@ simple_index.go`)
 	fmt.Printf("term=%q\n", term)
 
 	// Open existing index.
-	index, err := bleve.Open(repository)
+	index, err := bleve.Open(store)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", repository)
+		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", store)
 		panic(err)
 	}
 
@@ -44,6 +46,7 @@ simple_index.go`)
 	// search.Highlight = bleve.NewHighlightWithStyle("html")
 	search.Highlight = bleve.NewHighlight()
 	search.Fields = []string{"Contents"}
+	search.Highlight.Fields = search.Fields
 
 	searchResults, err := index.Search(search)
 	if err != nil {
