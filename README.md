@@ -38,14 +38,15 @@ gives
 <strong>searchResults=755 matches, showing 1 through 10, took 5.396772ms</strong>
 
 <strong>1. 1faa31928e.284 (0.414407) </strong>
-  Contents
+
     <strong><em>PDF</em></strong> 32000-1:2008
 Table 119 –  Character collections for predefined CMaps, by <strong><em>PDF</em></strong> version  (continued)
 CMAP <strong><em>PDF</em></strong> 1.2 <strong><em>PDF</em></strong> 1.3 <strong><em>PDF</em></strong> 1.4 <strong><em>PDF</em></strong> 1.5
 GBK2K-H/V — — <strong><em>Adobe</em></strong>-GB1-4 <strong><em>Adobe</em></strong>-GB1-4
 UniGB-UCS2-H/V — <strong><em>Adobe</em></strong>-…
- <strong>2. 1faa31928e.6 (0.322457) </strong>
-  Contents
+
+<strong>2. 1faa31928e.6 (0.322457) </strong>
+
     <strong><em>PDF</em></strong> 32000-1:2008
     Foreword
 On January 29, 2007, <strong><em>Adobe</em></strong> Systems Incorporated announced it’s intention to release the full Portable
@@ -62,19 +63,19 @@ gives
 <strong>searchResults=220 matches, showing 1 through 10, took 12.175059ms</strong>
 
 <strong>1. 1faa31928e.710 (0.721218)</strong>
-..Contents
+
 ....…bj
 
 7  0  obj
 <<  /Type  /Font
-  /Subtype  /<strong><em>ype1</em></strong>
-  /Name  /F1
-  /BaseFont  /Helvetica
-  /<mark>Encoding</em></strong> /<mark>MacRomanEncoding</em></strong>
+    /Subtype  /<strong><em>Type1</em></strong>
+    /Name  /F1
+    /BaseFont  /Helvetica
+    /<mark>Encoding</em></strong> /<mark>MacRomanEncoding</em></strong>
 >>
 endobj
 
 <strong>2. 1faa31928e.271 (0.427241)</strong>
-..Contents
+
 ....…ut this <mark>encoding</em></strong>does play a role as a default <mark>encoding</em></strong>(as shown in Table 114). The regular encodings
 used for Lat
