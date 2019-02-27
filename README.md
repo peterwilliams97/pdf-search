@@ -38,17 +38,17 @@ gives
 searchResults=755 matches, showing 1 through 10, took 5.396772ms
 1. 1faa31928e.284 (0.414407)
   Contents
-    <bold>PDF</bold> 32000-1:2008
-Table 119 –  Character collections for predefined CMaps, by <bold>PDF</bold> version  (continued)
-CMAP <bold>PDF</bold> 1.2 <bold>PDF</bold> 1.3 <bold>PDF</bold> 1.4 <bold>PDF</bold> 1.5
-GBK2K-H/V — — <bold>Adobe</bold>-GB1-4 <bold>Adobe</bold>-GB1-4
-UniGB-UCS2-H/V — <bold>Adobe</bold>-…
+    <b>PDF</b> 32000-1:2008
+Table 119 –  Character collections for predefined CMaps, by <b>PDF</b> version  (continued)
+CMAP <b>PDF</b> 1.2 <b>PDF</b> 1.3 <b>PDF</b> 1.4 <b>PDF</b> 1.5
+GBK2K-H/V — — <b>Adobe</b>-GB1-4 <b>Adobe</b>-GB1-4
+UniGB-UCS2-H/V — <b>Adobe</b>-…
 2. 1faa31928e.6 (0.322457)
   Contents
-    <bold>PDF</bold> 32000-1:2008
+    <b>PDF</b> 32000-1:2008
     Foreword
-On January 29, 2007, <bold>Adobe</bold> Systems Incorporated announced it’s intention to release the full Portable
-Document Format (<bold>PDF</bold>) 1.7 specification to the American National Standa…
+On January 29, 2007, <b>Adobe</b> Systems Incorporated announced it’s intention to release the full Portable
+Document Format (<b>PDF</b>) 1.7 specification to the American National Standa…
 ...
 
 or
