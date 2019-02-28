@@ -1,7 +1,8 @@
 Programs for Searching PDF Files.
 ================================
 
-Uses UniDoc for PDF parsing and Bleve for full text search.
+Uses [UniDoc](https://unidoc.io/) for PDF parsing and [bleve](http://github.com/blevesearch/bleve)
+for [full text search](https://en.wikipedia.org/wiki/Full-text_search).
 
 Installation (UniDoc)
 ---------------------
@@ -86,12 +87,12 @@ used for Lat
 
 References
 ==========
-https://en.wikipedia.org/wiki/Full-text_search
-https://en.wikipedia.org/wiki/Information_retrieval
+* [Full text search](https://en.wikipedia.org/wiki/Full-text_search)
+* [Information retrieval](https://en.wikipedia.org/wiki/Information_retrieval)
 
 TODO
 ====
-Move to unidoc:v3
-Make go gettable
-Add tests
-Markup PDF files
+* Move to unidoc:v3
+* Make go gettable
+* Add tests
+* Markup PDF files
