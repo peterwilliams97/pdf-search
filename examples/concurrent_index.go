@@ -84,20 +84,19 @@ store.concurrent.`)
 				panic(err)
 			}
 		}
-		docCount := len(result.docPages)
-		// docCount, err := index.DocCount()
-		// if err != nil {
-		// 	fmt.Printf("worker %d) %+v index.DocCount failed err=%v.\n",
-		// 		result.workerIdx, result.docID, err)
-		// 	continue
-		// }
-		fmt.Printf("worker %d) done=%d i=%d %q Total %d pages.\n",
-			result.workerIdx, numDone, result.idx, filepath.Base(result.inPath), docCount)
+		docCount, err := index.DocCount()
+		if err != nil {
+			fmt.Printf("%+v index.DocCount failed err=%v.\n", result.docID, err)
+			continue
+		}
+		fmt.Printf("done=%d i=%d %q Total %d pages.\n",
+			numDone, result.idx, filepath.Base(result.inPath), docCount)
 	}
 
-	// Shut down the processing queue.
-	fmt.Println("Finished")
+	// Shut down the processing queue workers.
 	queue.Close()
+
+	fmt.Println("Finished")
 }
 
 // NewExtractDocQueue creates a processing queue for document text extraction with `numWorkers`
@@ -108,7 +107,7 @@ func NewExtractDocQueue(numWorkers int) *extractDocQueue {
 		done:  make(chan struct{}),
 	}
 	for i := 0; i < numWorkers; i++ {
-		go extractDocWorker(i, q)
+		go extractDocWorker(q)
 	}
 	return &q
 }
@@ -132,54 +131,54 @@ func NewExtractDocWork(idx int, inPath string, rc chan *extractDocResult) *extra
 	return &extractDocWork{id, rc}
 }
 
+// extractDocQueue is a queue of PDF processing jobs.
 type extractDocQueue struct {
 	queue chan *extractDocWork
 	done  chan struct{}
 }
 
+// extractDocWork is a set of instructions for one PDF processing job.
 type extractDocWork struct {
-	docID
-	rc chan *extractDocResult
+	docID                        // Identifies PDF file.
+	rc    chan *extractDocResult // Results are via this channel.
 }
 
+// extractDocResult are the results of one PDF processing job.
 type extractDocResult struct {
-	docID
-	docPages  []PdfPage
-	err       error
-	workerIdx int
+	docID              // Identifies PDF file.
+	docPages []PdfPage // Information about text on pages.
+	err      error
 }
 
+// docID identifies a PDF file.
 type docID struct {
 	idx    int // index into input list
 	inPath string
 }
 
-func (w extractDocWork) extract(workerIdx int) *extractDocResult {
-	fmt.Printf("worker %d) extract %q\n", workerIdx, w.inPath)
-	result := extractDocResult{docID: w.docID, workerIdx: workerIdx}
+// extract runns the PDF processing code for the instructions in `w`.
+func (w extractDocWork) extract() *extractDocResult {
+	result := extractDocResult{docID: w.docID}
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("worker %d) crashed %+v r=%v\n", workerIdx, w.docID, r)
-			fmt.Fprintf(os.Stderr, "worker %d) crashed %+v r=%v\n", workerIdx, w.docID, r)
+			fmt.Printf("Recover: %+v r=%v\n", w.docID, r)
+			fmt.Fprintf(os.Stderr, "Recover: %+v r=%v\n", w.docID, r)
 			result.err = r.(error)
 		}
 	}()
-	result.docPages, result.err = extractDocPages(fmt.Sprintf("worker %d)", workerIdx), w.inPath)
+	result.docPages, result.err = extractDocPages(w.inPath)
 	return &result
 }
 
 // extractDocWorker runs in each worker go routine. It reads work off `q` and calls the PDF
 // processing code.
-// `workerIdx` is a hacky diagnostic to identify the go routine run in !@#$
-// ``
-func extractDocWorker(workerIdx int, q extractDocQueue) {
+func extractDocWorker(q extractDocQueue) {
 	for {
 		select {
 		case <-q.done:
 			return
 		case w := <-q.queue:
-			r := w.extract(workerIdx)
-			w.rc <- r
+			w.rc <- w.extract()
 		}
 	}
 }
@@ -195,8 +194,8 @@ type PdfPage struct {
 }
 
 // extractDocPages uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
-// of PdfPage
-func extractDocPages(desc, inPath string) ([]PdfPage, error) {
+// of PdfPage.
+func extractDocPages(inPath string) ([]PdfPage, error) {
 
 	hash, err := utils.FileHash(inPath)
 	if err != nil {
@@ -205,7 +204,7 @@ func extractDocPages(desc, inPath string) ([]PdfPage, error) {
 
 	pdfReader, err := utils.PdfOpen(inPath)
 	if err != nil {
-		fmt.Printf("%s extractDocPages: Could not open inPath=%q. err=%v\n", desc, inPath, err)
+		fmt.Printf("extractDocPages: Could not open inPath=%q. err=%v\n", inPath, err)
 		return nil, err
 	}
 	numPages, err := pdfReader.GetNumPages()
@@ -224,8 +223,8 @@ func extractDocPages(desc, inPath string) ([]PdfPage, error) {
 		text, err = utils.ExtractPageText(page)
 		if err != nil {
 			if utils.Debug {
-				fmt.Printf("%s extractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v\n",
-					desc, inPath, pageNum, err)
+				fmt.Printf("extractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v\n",
+					inPath, pageNum, err)
 			}
 			return nil, err
 		}
@@ -242,7 +241,7 @@ func extractDocPages(desc, inPath string) ([]PdfPage, error) {
 
 		docPages = append(docPages, pdfPage)
 		if len(docPages)%100 == 99 {
-			fmt.Printf("\t%s pageNum=%d docPages=%d %q\n", desc, pageNum, len(docPages), inPath)
+			fmt.Printf("\tpageNum=%d docPages=%d %q\n", pageNum, len(docPages), inPath)
 		}
 	}
 
