@@ -83,3 +83,15 @@ endobj
 …ut this <strong><em>encoding</em></strong>does play a role as a default <strong><em>encoding</em></strong>(as shown in Table 114). The regular encodings
 used for Lat
 </code>
+
+References
+==========
+https://en.wikipedia.org/wiki/Full-text_search
+https://en.wikipedia.org/wiki/Information_retrieval
+
+TODO
+====
+Move to unidoc:v3
+Make go gettable
+Add tests
+Markup PDF files

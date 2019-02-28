@@ -11,10 +11,10 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-var store = "store.simple"
+var indexPath = "store.simple"
 
 func main() {
-	flag.StringVar(&store, "s", store, "Bleve store name. This is a directory.")
+	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
 	utils.MakeUsage(`Usage: go run simple_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
 simple_index.go`)
@@ -33,9 +33,9 @@ simple_index.go`)
 	fmt.Printf("term=%q\n", term)
 
 	// Open existing index.
-	index, err := bleve.Open(store)
+	index, err := bleve.Open(indexPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", store)
+		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", indexPath)
 		panic(err)
 	}
 
@@ -61,7 +61,28 @@ simple_index.go`)
 		os.Exit(0)
 	}
 	for i, hit := range searchResults.Hits {
-		fmt.Printf("%2d: %s\n", i, hit)
+		text := hit.Fields["Contents"].(string)
+		locations := hit.Locations
+		contents := locations["Contents"]
+
+		// fmt.Printf("%2d: %s\n\tLocations=%T\n\tcontents=%T\n\tencoding=%#v\n",
+		// 	i, hit, hit.Locations, hit.Locations["Contents"], hit.Locations["Contents"]["encoding"])
+		fmt.Printf("%2d: %s Hit=%T Locations=%d %T contents=%d %T  text=%d %T\n",
+			i, hit, hit,
+			len(locations), locations,
+			len(contents), contents,
+			len(text), text)
+
+		k := 0
+		for term, termLocations := range contents {
+			fmt.Printf("%6d: term=%q matches=%d\n", k, term, len(termLocations))
+			k++
+			for j, loc := range termLocations {
+				l := *loc
+				snip := text[l.Start:l.End]
+				fmt.Printf("%9d: %d [%d:%d] %q\n", j, l.Pos, l.Start, l.End, snip)
+			}
+		}
 	}
 	fmt.Println("=================@@@=====================")
 }

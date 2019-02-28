@@ -10,10 +10,10 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-var store = "store.simple"
+var indexPath = "store.simple"
 
 func main() {
-	flag.StringVar(&store, "s", store, "Bleve store name. This is a directory.")
+	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
 	utils.MakeUsage(`Usage: go run simple_index.go [OPTIONS] PDF32000_2008.pdf
 Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`)
 	flag.Parse()
@@ -36,9 +36,9 @@ Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to
 
 	// Create a new index.
 	mapping := bleve.NewIndexMapping()
-	index, err := bleve.New(store, mapping)
+	index, err := bleve.New(indexPath, mapping)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", store)
+		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", indexPath)
 		panic(err)
 	}
 

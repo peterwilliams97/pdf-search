@@ -34,6 +34,9 @@ func init() {
 	flag.BoolVar(&ShowHelp, "h", false, "Show this help message.")
 	flag.BoolVar(&Debug, "d", false, "Print debugging information.")
 	flag.BoolVar(&Trace, "e", false, "Print detailed debugging information.")
+	if Trace {
+		Debug = true
+	}
 }
 
 func SetLogging() {
@@ -102,16 +105,15 @@ func ExtractPageText(page *pdf.PdfPage) (string, error) {
 
 // ExtractPageTextList returns the PageText on page `page`.
 // PageText is an opaque UniDoc struct that describes the text marks on a PDF page.
-func ExtractPageTextList(page *pdf.PdfPage) (pageText *extractor.PageText, err error) {
-	var ex *extractor.Extractor
-	ex, err = extractor.New(page)
+func ExtractPageTextList(page *pdf.PdfPage) (*extractor.PageText, error) {
+	ex, err := extractor.New(page)
 	if err != nil {
-		fmt.Printf("ExtractPageTextList: extractor.New failed. err=%v", err)
-		return
+		fmt.Printf("ExtractPageTextList: extractor.New failed. err=%v\n", err)
+		return nil, err
 	}
-	pageText, _, _, err = ex.ExtractPageText()
+	pageText, _, _, err := ex.ExtractPageText()
 	if err != nil {
-		fmt.Printf("ExtractPageTextList: ExtractPageText failed. err=%v", err)
+		fmt.Printf("ExtractPageTextList: ExtractPageText failed. err=%v\n", err)
 	}
-	return
+	return pageText, err
 }
