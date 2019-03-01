@@ -1,8 +1,9 @@
-Programs for Searching PDF Files.
-================================
+Pure Go Full Text Search of PDF Files
+=====================================
 
-Uses [UniDoc](https://unidoc.io/) for PDF parsing and [bleve](http://github.com/blevesearch/bleve)
-for [full text search](https://en.wikipedia.org/wiki/Full-text_search).
+The repo has a series of example programs for doing [full text search](https://en.wikipedia.org/wiki/Full-text_search) on PDF files in pure Go. It uses [UniDoc](https://unidoc.io/) for PDF parsing and [bleve](http://github.com/blevesearch/bleve) for search.
+
+The simple programs are to explore the UniDoc and Bleve libraries.
 
 Installation (UniDoc)
 ---------------------
@@ -87,7 +88,8 @@ used for Lat
 
 Concurrent indexing
 ------------
-	concurrent_index.go        Index PDFs concurrently. 1 PDF file per task.
+	concurrent_index_doc.go        Index PDFs concurrently. Granularity is PDF file.
+	concurrent_index_page.go       Index PDFs concurrently. Granularity is PDF page.
 
 
 References
