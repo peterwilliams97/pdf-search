@@ -85,6 +85,11 @@ endobj
 used for Lat
 </code>
 
+Concurrent indexing
+------------
+	concurrent_index.go        Index PDFs concurrently. 1 PDF file per task.
+
+
 References
 ==========
 * [Full text search](https://en.wikipedia.org/wiki/Full-text_search)
