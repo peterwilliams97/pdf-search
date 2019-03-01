@@ -16,6 +16,10 @@ var indexPath = "store.simple"
 
 func main() {
 	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
+	var forceCreate, allowAppend bool
+	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
+	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
+
 	utils.MakeUsage(usage)
 	flag.Parse()
 	utils.SetLogging()
@@ -28,6 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Read the list of PDF files that will be processed.
 	pathList, err := utils.PatternsToPaths(flag.Args(), true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
@@ -37,8 +42,7 @@ func main() {
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
 	// Create a new index.
-	mapping := bleve.NewIndexMapping()
-	index, err := bleve.New(indexPath, mapping)
+	index, err := utils.CreateBleveIndex(indexPath, forceCreate, allowAppend)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", indexPath)
 		panic(err)

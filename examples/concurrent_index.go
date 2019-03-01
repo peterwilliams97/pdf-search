@@ -6,7 +6,6 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/blevesearch/bleve"
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
@@ -17,8 +16,11 @@ store.concurrent.`
 var indexPath = "store.concurrent"
 
 func main() {
-	numWorkers := -1
 	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
+	var forceCreate, allowAppend bool
+	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
+	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
+	numWorkers := -1
 	flag.IntVar(&numWorkers, "w", numWorkers, "Number of worker threads.")
 	utils.MakeUsage(usage)
 
@@ -46,8 +48,7 @@ func main() {
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
 	// Create a new index.
-	mapping := bleve.NewIndexMapping()
-	index, err := bleve.New(indexPath, mapping)
+	index, err := utils.CreateBleveIndex(indexPath, forceCreate, allowAppend)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", indexPath)
 		panic(err)
