@@ -16,6 +16,17 @@ func init() {
 	flag.BoolVar(&RecoverErrors, "r", false, "Recover from errors in library functions.")
 }
 
+// DocID identifies a PDF file.
+type DocID struct {
+	idx    int // index into input list
+	inPath string
+}
+
+// String returns the view of DocID that users see.
+func (id DocID) String() string {
+	return fmt.Sprintf("%d: %q", id.idx, id.inPath)
+}
+
 // PdfPage is a simple but inefficient way of encoding a PDF page in a Bleve index.
 // We use it in our first example program because we are just showing how Bleve works and not
 // writing production code.
@@ -94,4 +105,57 @@ func extractDocPages(inPath string) ([]PdfPage, error) {
 	}
 
 	return docPages, nil
+}
+
+// ExtractDocPagesChan uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
+// of PdfPage.
+func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) {
+
+	hash, err := FileHash(inPath)
+	if err != nil {
+		return nil, err
+	}
+
+	pdfReader, err := PdfOpen(inPath)
+	if err != nil {
+		common.Log.Error("ExtractDocPages: Could not open inPath=%q. err=%v", inPath, err)
+		return nil, err
+	}
+	numPages, err := pdfReader.GetNumPages()
+	if err != nil {
+		return nil, err
+	}
+
+	var pagesDone []int
+	for pageNum := 1; pageNum < numPages; pageNum++ {
+		page, err := pdfReader.GetPage(pageNum)
+		if err != nil {
+			return nil, err
+		}
+
+		text, err := ExtractPageText(page)
+		if err != nil {
+			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
+				inPath, pageNum, err)
+			return nil, err
+		}
+		if text == "" {
+			continue
+		}
+
+		pdfPage := PdfPage{
+			ID:       fmt.Sprintf("%s.%d", hash[:10], pageNum),
+			Name:     filepath.Base(inPath),
+			Page:     pageNum,
+			Contents: text,
+		}
+
+		docPages <- pdfPage
+		pagesDone = append(pagesDone, pageNum)
+		if len(docPages)%100 == 99 {
+			common.Log.Debug("\tpageNum=%d docPages=%d %q", pageNum, len(pagesDone), inPath)
+		}
+	}
+
+	return pagesDone, nil
 }

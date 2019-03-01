@@ -1,7 +1,5 @@
 package utils
 
-import "fmt"
-
 // NewExtractDocQueue creates a processing queue for document text extraction with `numWorkers`
 // worker go routines.
 func NewExtractDocQueue(numWorkers int) *extractDocQueue {
@@ -20,7 +18,7 @@ func (q *extractDocQueue) Queue(work *extractDocWork) {
 	q.queue <- work
 }
 
-// Close shut downs all the workers in `q`
+// Close shut downs all the workers in `q`.
 func (q *extractDocQueue) Close() {
 	close(q.done)
 }
@@ -51,17 +49,6 @@ type ExtractDocResult struct {
 	DocID              // Identifies PDF file.
 	DocPages []PdfPage // Information about text on pages.
 	err      error
-}
-
-// DocID identifies a PDF file.
-type DocID struct {
-	idx    int // index into input list
-	inPath string
-}
-
-// String returns the view of DocID that users see.
-func (id DocID) String() string {
-	return fmt.Sprintf("%d: %q", id.idx, id.inPath)
 }
 
 // extract runs the PDF processing code according to the instructions in work `w`.

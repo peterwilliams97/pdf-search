@@ -9,11 +9,11 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-const usage = `Usage: go run concurrent_index_doc.go [OPTIONS] testdata/*.pdf
+const usage = `Usage: go run concurrent_inde_page.go [OPTIONS] testdata/*.pdf
 Runs UniDoc PDF text extraction on PDF files in testdata and writes a Bleve index to
 store.concurrent.`
 
-var indexPath = "store.concurrent.doc"
+var indexPath = "store.concurrent.page"
 
 func main() {
 	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
@@ -64,39 +64,41 @@ func main() {
 	fmt.Printf("%d workers\n", numWorkers)
 
 	// Create the processing queue.
-	queue := utils.NewExtractDocQueue(numWorkers)
-	resultChan := make(chan *utils.ExtractDocResult, len(pathList))
+	queue := utils.NewExtractPageQueue(numWorkers)
+	resultChan := make(chan *utils.ExtractPageResult)
 
 	// Start a go routine to feed the processing queue.
 	go func() {
 		// Create processing instructions `w` for each file in pathList and add the processing
 		// instructions to the queue.
 		for i, inPath := range pathList {
-			w := utils.NewExtractDocWork(i, inPath, resultChan)
+			w := utils.NewExtractPageWork(i, inPath, resultChan)
 			queue.Queue(w)
 		}
 	}()
 
-	// Wait for extraction results here in the main thread.
-	for numDone := 0; numDone < len(pathList); numDone++ {
-		result := <-resultChan
-		for _, page := range result.DocPages {
-			err = index.Index(page.ID, page)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Could not index %s.\n", result.DocID)
-				panic(err)
-			}
-		}
-		docCount, err := index.DocCount()
+	completeJob := func(pageResult utils.ExtractPageResult) error {
+		page := pageResult.Page
+		err := index.Index(page.ID, page)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "index.DocCount failed for %s. err=%v\n", result.DocID, err)
-			continue
+			fmt.Fprintf(os.Stderr, "Could not index %s.\n", pageResult.DocID)
+			panic(err)
 		}
-		fmt.Printf("done=%d %s Total %d pages.\n", numDone, result.DocID, docCount)
+		return err
 	}
+
+	// Wait for extraction results here in the main thread.
+	queue.Complete(len(pathList), completeJob)
 
 	// Shut down the processing queue workers.
 	queue.Close()
+
+	docCount, err := index.DocCount()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "index.DocCount failed. err=%v\n", err)
+		return
+	}
+	fmt.Printf("Total %d pages.\n", docCount)
 
 	fmt.Println("Finished")
 }
