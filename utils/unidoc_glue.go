@@ -45,7 +45,7 @@ func SetLogging() {
 	} else if Debug {
 		common.SetLogger(common.NewConsoleLogger(common.LogLevelDebug))
 	} else {
-		common.SetLogger(common.NewConsoleLogger(common.LogLevelError))
+		common.SetLogger(common.NewConsoleLogger(common.LogLevelInfo))
 	}
 }
 
@@ -116,4 +116,28 @@ func ExtractPageTextList(page *pdf.PdfPage) (*extractor.PageText, error) {
 		fmt.Printf("ExtractPageTextList: ExtractPageText failed. err=%v\n", err)
 	}
 	return pageText, err
+}
+
+// ProcessPDFPages runs `processPage` on every page in PDF file `inPath`.
+func ProcessPDFPages(inPath string, processPage func(pageNum int, page *pdf.PdfPage) error) error {
+	pdfReader, err := PdfOpen(inPath)
+	if err != nil {
+		common.Log.Error("ProcessPDFPages: Could not open inPath=%q. err=%v", inPath, err)
+		return err
+	}
+	numPages, err := pdfReader.GetNumPages()
+	if err != nil {
+		return err
+	}
+
+	for pageNum := 1; pageNum < numPages; pageNum++ {
+		page, err := pdfReader.GetPage(pageNum)
+		if err != nil {
+			return err
+		}
+		if err = processPage(pageNum, page); err != nil {
+			return err
+		}
+	}
+	return nil
 }
