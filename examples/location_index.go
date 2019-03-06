@@ -53,13 +53,6 @@ func main() {
 		panic(err)
 	}
 
-	// locationsFile, err := os.Create(locationsPath)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "Could not create locations file %q.\n", locationsPath)
-	// 	panic(err)
-	// }
-	// defer locationsFile.Close()
-
 	hs, err := utils.OpenLocationsState(basePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not oopen hash file %q. err=%v\n", basePath, err)
@@ -83,6 +76,11 @@ func main() {
 
 }
 
+type IDText struct {
+	ID   string
+	Text string
+}
+
 // indexDocPagesLoc adds the text of all the pages in PDF file `inPath` to Bleve index `index`.
 func indexDocPagesLoc(index bleve.Index, hs *utils.LocationsState, inPath string) error {
 	docPages, err := hs.ExtractDocPagesLookup2(inPath)
@@ -102,8 +100,9 @@ func indexDocPagesLoc(index bleve.Index, hs *utils.LocationsState, inPath string
 	t0 := time.Now()
 	for i, l := range docPages {
 		// Don't weigh down the Bleve index with the text bounding boxes.
-		id := fmt.Sprintf("%04X.%d", l.Doc, l.Page)
-		err = index.Index(id, l.ToPdfPage())
+		id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
+		idText := IDText{ID: id, Text: l.Text}
+		err = index.Index(id, idText)
 		dt := time.Since(t0)
 		if err != nil {
 			return err

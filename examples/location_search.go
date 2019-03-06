@@ -1,17 +1,22 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/registry"
 	"github.com/peterwilliams97/pdf-search/utils"
 )
+
+const usage = `Usage: go run location_search.go [OPTIONS] Adobe PDF
+Performs a full text search for "Adobe PDF" in Bleve index "store.location" that was created with
+simple_index.go`
 
 var basePath = "store.xxx"
 
@@ -20,9 +25,7 @@ func main() {
 	indexPath := filepath.Join(basePath, "bleve")
 	// locationsPath := filepath.Join(basePath, "locations")
 	// hashPath := filepath.Join(basePath, "file_hash.json")
-	utils.MakeUsage(`Usage: go run location_search.go [OPTIONS] Adobe PDF
-Performs a full text search for "Adobe PDF" in Bleve index "store.location" that was created with
-simple_index.go`)
+	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
 	if utils.ShowHelp {
@@ -43,13 +46,8 @@ simple_index.go`)
 		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", indexPath)
 		panic(err)
 	}
-	b, err := ioutil.ReadAll(locationsPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open locations %q.\n", locationsPath)
-		panic(err)
-	}
 
-	hs, err := utils.OpenLocationsState(basePath)
+	lState, err := utils.OpenLocationsState(basePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not oopen hash file %q. err=%v\n", basePath, err)
 		panic(err)
@@ -61,7 +59,7 @@ simple_index.go`)
 	fmt.Printf("Higlighters=%+v\n", types)
 	// search.Highlight = bleve.NewHighlightWithStyle("html")
 	search.Highlight = bleve.NewHighlight()
-	search.Fields = []string{"Contents"}
+	search.Fields = []string{"Text"}
 	search.Highlight.Fields = search.Fields
 
 	searchResults, err := index.Search(search)
@@ -77,16 +75,26 @@ simple_index.go`)
 		os.Exit(0)
 	}
 	for i, hit := range searchResults.Hits {
-		text := hit.Fields["Contents"].(string)
+		id := hit.Fields["ID"].(string)
+		text := hit.Fields["Text"].(string)
 		locations := hit.Locations
-		contents := locations["Contents"]
+		contents := locations["Text"]
 
-		// fmt.Printf("%2d: %s\n\tLocations=%T\n\tcontents=%T\n\tencoding=%#v\n",
-		// 	i, hit, hit.Locations, hit.Locations["Contents"], hit.Locations["Contents"]["encoding"])
-		fmt.Printf("%2d: %s Hit=%T Locations=%d %T contents=%d %T  text=%d %T\n",
+		docIdx, pageIdx, err := decodeID(id)
+		if err != nil {
+			panic(err)
+		}
+		dpl, err := lState.ReadDocPageLocations(docIdx, pageIdx)
+		if err != nil {
+			panic(err)
+		}
+
+		pdfLocations := dpl.Locations
+		pdfLocations = pdfLocations
+
+		fmt.Printf("%2d: %s Hit=%T Locations=%d %T text=%d %T\n",
 			i, hit, hit,
 			len(locations), locations,
-			len(contents), contents,
 			len(text), text)
 
 		k := 0
@@ -101,4 +109,21 @@ simple_index.go`)
 		}
 	}
 	fmt.Println("=================@@@=====================")
+}
+
+// id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
+func decodeID(id string) (uint64, uint32, error) {
+	parts := strings.Split(id, ".")
+	if len(parts) != 2 {
+		return 0, 0, errors.New("bad format")
+	}
+	docIdx, err := strconv.ParseUint(parts[0], 16, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+	pageIdx, err := strconv.ParseUint(parts[0], 10, 32)
+	if err != nil {
+		return 0, 0, err
+	}
+	return uint64(docIdx), uint32(pageIdx), nil
 }

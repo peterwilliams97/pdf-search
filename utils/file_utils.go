@@ -201,6 +201,8 @@ type fileInfo struct {
 	os.FileInfo
 }
 
+var FileHashSize = -1
+
 // FileHash returns a hex encoded string of the SHA-256 digest of the contents of file `filename`.
 func FileHash(filename string) (string, error) {
 	b, err := ioutil.ReadFile(filename)
@@ -209,7 +211,11 @@ func FileHash(filename string) (string, error) {
 	}
 	hasher := sha256.New()
 	hasher.Write(b)
-	return hex.EncodeToString(hasher.Sum(nil)), nil
+	digest := hex.EncodeToString(hasher.Sum(nil))
+	if FileHashSize > 0 && FileHashSize < len(digest) {
+		digest = digest[:FileHashSize]
+	}
+	return digest, nil
 }
 
 // Reverse returns `arr` in reverse order.

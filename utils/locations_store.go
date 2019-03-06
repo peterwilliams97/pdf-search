@@ -131,9 +131,9 @@ func (lState *LocationsState) ExtractDocPagesLookup2(inPath string) ([]Loc2Page,
 			return err
 		}
 		docPages = append(docPages, Loc2Page{
-			Doc:      docIdx,
-			Page:     pageIdx,
-			Contents: text,
+			DocIdx:  docIdx,
+			PageIdx: pageIdx,
+			Text:    text,
 		})
 		if len(docPages)%100 == 99 {
 			common.Log.Info("\tpageNum=%d docPages=%d %q", pageNum, len(docPages), inPath)
@@ -149,32 +149,6 @@ func (lState *LocationsState) ExtractDocPagesLookup2(inPath string) ([]Loc2Page,
 	}
 	return docPages, err
 }
-
-// // ReadLocations returns the DocPageLocations for the PDF page given by `doc`, `page`.
-// func (lState *LocationsState) ReadLocations(doc uint64, page uint32) ([]serial.DocPageLocations, error) {
-// 	hash, ok := lState.indexHash[doc]
-// 	if !ok {
-// 		panic("XXXX")
-// 	}
-// 	locationsPath := lState.locationsPath(hash)
-// 	locationsFile, err := os.Open(locationsPath)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "Could not open locations file %q.\n", locationsPath)
-// 		panic(err)
-// 	}
-// 	defer locationsFile.Close()
-
-// 	var dplList []serialDocPageLocation
-// 	for _, l := range docPages {
-// 		// dpl := l.ToDocPageLocations()
-// 		dpl, err := serial.RReadDocPageLocations(locationsFile)
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 		dplList = append(dplList, dpl)
-// 	}
-// 	return dplList, nil
-// }
 
 // addFile adds PDF file `fd` to `lState`. fileList.
 func (lState *LocationsState) AddFile(fd FileDesc) (uint64, string, bool) {
@@ -243,15 +217,86 @@ type LocationsDoc struct {
 }
 
 func (lState *LocationsState) CreateLocationsDoc(docIdx uint64) (*LocationsDoc, error) {
+	lDoc := lState.baseFields(docIdx)
 
 	err := lState.createIfNecessary()
 	if err != nil {
 		panic(err)
 	}
+	lDoc.dataFile, err = os.Create(lDoc.dataPath)
+	if err != nil {
+		panic(err)
+		return nil, err
+	}
+	return lDoc, nil
+}
+
+// ReadDocPageLocations is inefficient. Document is opened and closed to read a file.
+func (lState *LocationsState) ReadDocPageLocations(docIdx uint64, pageIdx uint32) (
+	serial.DocPageLocations, error) {
+	lDoc, err := lState.OpenLocationsDoc(docIdx)
+	if err != nil {
+		return serial.DocPageLocations{}, err
+	}
+	defer lDoc.Close()
+	return lDoc.ReadDocPageLocations2(pageIdx)
+}
+
+// ReadLocations returns the DocPageLocations for the PDF page given by `doc`, `page`.
+// func (lState *LocationsState) ReadLocations(doc uint64, page uint32) ([]serial.DocPageLocations, error) {
+// 	hash, ok := lState.indexHash[doc]
+// 	if !ok {
+// 		panic("XXXX")
+// 	}
+// 	locationsPath := lState.locationsPath(hash)
+// 	locationsFile, err := os.Open(locationsPath)
+// 	if err != nil {
+// 		fmt.Fprintf(os.Stderr, "Could not open locations file %q.\n", locationsPath)
+// 		panic(err)
+// 	}
+// 	defer locationsFile.Close()
+
+// 	var dplList []serial.DocPageLocation
+
+// 		// dpl := l.ToDocPageLocations()
+// 		dpl, err := serial.RReadDocPageLocations(locationsFile)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 		dplList = append(dplList, dpl)
+// 	}
+// 	return dplList, nil
+// }
+
+func (lState *LocationsState) OpenLocationsDoc(docIdx uint64) (*LocationsDoc, error) {
+	lDoc := lState.baseFields(docIdx)
+
+	f, err := os.Open(lDoc.dataPath)
+	if err != nil {
+		panic(err)
+		return nil, err
+	}
+	lDoc.dataFile = f
+
+	b, err := ioutil.ReadFile(lDoc.indexPath)
+	if err != nil {
+		return nil, err
+	}
+	var index []IndexEntry
+	if err := json.Unmarshal(b, &index); err != nil {
+		return nil, err
+	}
+	lDoc.index = index
+
+	return lDoc, nil
+}
+
+func (lState *LocationsState) baseFields(docIdx uint64) *LocationsDoc {
 	hash := lState.fileList[docIdx].Hash
 	locPath := lState.locationsPath(hash)
 	dataPath := locPath + ".dat"
 	indexPath := locPath + ".idx.json"
+	var err error
 	indexPath, err = filepath.Abs(indexPath)
 	if err != nil {
 		panic(err)
@@ -260,92 +305,28 @@ func (lState *LocationsState) CreateLocationsDoc(docIdx uint64) (*LocationsDoc, 
 	if err != nil {
 		panic(err)
 	}
-	f, err := os.Create(dataPath)
-	if err != nil {
-		panic(err)
-		return nil, err
-	}
 	return &LocationsDoc{
 		lState:    lState,
-		dataFile:  f,
 		dataPath:  dataPath,
 		indexPath: indexPath,
-		// index:     []IndexEntry{},
-	}, nil
+	}
 }
 
-// func (lState *LocationsState) OpenLocationsDoc(storeDir string) (*LocationsDoc, error) {
-// 	dataPath := filepath.Join(storeDir, "dat")
-// 	indexPath := filepath.Join(storeDir, "idx")
-// 	buf, err := ioutil.ReadFile(indexPath)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	var index []IndexEntry
-// 	if err := json.Unmarshal(buf, &index); err != nil {
-// 		return nil, err
-// 	}
-// 	f, err := os.Open(dataPath)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return &LocationsDoc{
-// 		lState:    lState,
-// 		dataFile:  f,
-// 		index:     index,
-// 		indexPath: indexPath,
-// 		dataPath:  dataPath,
-// 	}, nil
-// }
-
-func (lDoc *LocationsDoc) Close() error {
-
-	lDoc.dataFile.Close()
-
+func (lDoc *LocationsDoc) Save() error {
 	b, err := json.MarshalIndent(lDoc.index, "", "\t")
-	// fmt.Printf("lDoc.index=%#v\n", lDoc.index)
-	// fmt.Printf("b=%s\n", string(b))
 	if err != nil {
 		return err
 	}
 	return ioutil.WriteFile(lDoc.indexPath, b, 0666)
-
-	// // if err := lState.createIfNecessary(); err != nil {
-	// // 	return err
-	// // }
-	// locationsPath := lDoc.dataPath
-	// locationsFile, err := os.Create(locationsPath)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "Could not create locations file %q.\n", locationsPath)
-	// 	panic(err)
-	// }
-	// defer locationsFile.Close()
-
-	// for _, l := range docPages {
-	// 	dpl := l.ToDocPageLocations()
-	// 	if err := serial.WriteDocPageLocations(locationsFile, dpl); err != nil {
-	// 		panic(err)
-	// 	}
-	// }
-
-	// indexPath := filepath.Join(locPath, "idx")
-
-	// return nil
 }
 
-// func (lDoc *LocationsDoc) Close() error {
-// 	for _, l := range lDoc.docPages {
-// 		dpl := l.ToDocPageLocations()
-// 		if err := serial.WriteDocPageLocations(locationsFile, dpl); err != nil {
-// 			panic(err)
-// 		}
-// 	}
-
-// 	if buf, err := json.MarshalIndent(lDoc.index, "", "\t"); err != nil {
-// 		return err
-// 	}
-// 	return lDoc.dataFile.Close()
-// }
+func (lDoc *LocationsDoc) Close() error {
+	err := lDoc.Save()
+	if err != nil {
+		return err
+	}
+	return lDoc.dataFile.Close()
+}
 
 func (lDoc *LocationsDoc) AddPage(dpl serial.DocPageLocations) (uint32, error) {
 	b := flatbuffers.NewBuilder(0)
@@ -369,7 +350,7 @@ func (lDoc *LocationsDoc) AddPage(dpl serial.DocPageLocations) (uint32, error) {
 	return uint32(len(lDoc.index) - 1), nil
 }
 
-func (lDoc *LocationsDoc) ReadDocPageLocations2(idx int) (serial.DocPageLocations, error) {
+func (lDoc *LocationsDoc) ReadDocPageLocations2(idx uint32) (serial.DocPageLocations, error) {
 	e := lDoc.index[idx]
 	lDoc.dataFile.Seek(io.SeekStart, int(e.Offset))
 	buf := make([]byte, e.Size)
@@ -424,18 +405,18 @@ func saveFileList(filename string, fileList []FileDesc) error {
 }
 
 type Loc2Page struct {
-	Doc      uint64 // Doc index.
-	Page     uint32 // Page index.
-	Contents string // Page text. !@#$ -> Text
+	DocIdx  uint64 // Doc index.
+	PageIdx uint32 // Page index.
+	Text    string // Page text. !@#$ -> Text
 }
 
-func (l Loc2Page) ID() string {
-	return fmt.Sprintf("%04X.%d", l.Doc, l.Page)
-}
+// func (l Loc2Page) ID() string {
+// 	return fmt.Sprintf("%04X.%d", l.Doc, l.Page)
+// }
 
-func (l Loc2Page) ToPdfPage() PdfPage {
-	return PdfPage{ID: l.ID(), Contents: l.Contents}
-}
+// func (l Loc2Page) ToPdfPage() PdfPage {
+// 	return PdfPage{ID: l.ID(), Contents: l.Contents}
+// }
 
 // ToSerialTextLocation converts extractor.TextLocation `loc` to a more compact serial.TextLocation.
 func ToSerialTextLocation(loc extractor.TextLocation) serial.TextLocation {
