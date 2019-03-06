@@ -1,12 +1,48 @@
-// Code from flatbuffers tutorial https://rwinslow.com/posts/use-flatbuffers-in-golang/
 package serial
 
 import (
+	"encoding/binary"
 	"errors"
+	"hash/crc32"
+	"os"
 
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/peterwilliams97/pdf-search/serial/locations"
 )
+
+func WriteDocPageLocations(f *os.File, dpl DocPageLocations) error {
+	b := flatbuffers.NewBuilder(0)
+	buf := MakeDocPageLocations(b, dpl)
+	check := crc32.ChecksumIEEE(buf) // uint32
+	size := uint64(len(buf))
+	if err := binary.Write(f, binary.LittleEndian, size); err != nil {
+		return err
+	}
+	if err := binary.Write(f, binary.LittleEndian, check); err != nil {
+		return err
+	}
+	_, err := f.Write(buf)
+	return err
+}
+
+func RReadDocPageLocations(f *os.File) (DocPageLocations, error) {
+	var size uint64
+	var check uint32
+	if err := binary.Read(f, binary.LittleEndian, &size); err != nil {
+		return DocPageLocations{}, err
+	}
+	if err := binary.Read(f, binary.LittleEndian, &check); err != nil {
+		return DocPageLocations{}, err
+	}
+	buf := make([]byte, size)
+	if _, err := f.Read(buf); err != nil {
+		return DocPageLocations{}, err
+	}
+	if crc32.ChecksumIEEE(buf) != check {
+		return DocPageLocations{}, errors.New("bad checksum")
+	}
+	return ReadDocPageLocations(buf)
+}
 
 // table TextLocation {
 // 	offset:   uint32;
@@ -32,21 +68,22 @@ type DocPageLocations struct {
 }
 
 func MakeTextLocation(b *flatbuffers.Builder, loc TextLocation) []byte {
-	// re-use the already-allocated Builder:
+	// Re-use the already-allocated Builder.
 	b.Reset()
 
-	// write the TextLocation object:
+	// Write the TextLocation object.
 	locOffset := addTextLocation(b, loc)
 
-	// finish the write operations by our TextLocation the root object:
+	// Finish the write operations by our TextLocation the root object.
 	b.Finish(locOffset)
 
-	// return the byte slice containing encoded data:
+	// Return the byte slice containing encoded data.
 	return b.Bytes[b.Head():]
 }
 
+// addTextLocation writes `loc` to builder `b`.
 func addTextLocation(b *flatbuffers.Builder, loc TextLocation) flatbuffers.UOffsetT {
-	// write the TextLocation object:
+	// Write the TextLocation object.
 	locations.TextLocationStart(b)
 	locations.TextLocationAddOffset(b, loc.Offset)
 	locations.TextLocationAddLlx(b, loc.Llx)
@@ -57,23 +94,15 @@ func addTextLocation(b *flatbuffers.Builder, loc TextLocation) flatbuffers.UOffs
 }
 
 func ReadTextLocation(buf []byte) TextLocation {
-	// initialize a User reader from the given buffer:
+	// Initialize a TextLocation reader from `buf`.
 	loc := locations.GetRootAsTextLocation(buf, 0)
-
-	// copy the TextLocation's fields (since these are numbers):
-	return TextLocation{loc.Offset(),
-		loc.Llx(),
-		loc.Lly(),
-		loc.Urx(),
-		loc.Ury(),
-	}
+	return getTextLocation(loc)
 }
 
 func getTextLocation(loc *locations.TextLocation) TextLocation {
-	// initialize a User reader from the given buffer:
-
-	// copy the TextLocation's fields (since these are numbers):
-	return TextLocation{loc.Offset(),
+	// Copy the TextLocation's fields (since these are numbers).
+	return TextLocation{
+		loc.Offset(),
 		loc.Llx(),
 		loc.Lly(),
 		loc.Urx(),
@@ -96,25 +125,25 @@ func MakeDocPageLocations(b *flatbuffers.Builder, dpl DocPageLocations) []byte {
 	}
 	locationsOfs := b.EndVector(len(dpl.Locations))
 
-	// write the DocPageLocations object:
+	// Write the DocPageLocations object.
 	locations.DocPageLocationsStart(b)
 	locations.DocPageLocationsAddDoc(b, dpl.Doc)
 	locations.DocPageLocationsAddPage(b, dpl.Page)
 	locations.DocPageLocationsAddLocations(b, locationsOfs)
-	textlocOfs := locations.DocPageLocationsEnd(b)
+	dplOfs := locations.DocPageLocationsEnd(b)
 
-	// finish the write operations by our DocPageLocations the root object:
-	b.Finish(textlocOfs)
+	// Finish the write operations by our DocPageLocations the root object.
+	b.Finish(dplOfs)
 
 	// return the byte slice containing encoded data:
 	return b.Bytes[b.Head():]
 }
 
 func ReadDocPageLocations(buf []byte) (DocPageLocations, error) {
-	// initialize a User reader from the given buffer:
+	// Initialize a DocPageLocations reader from `buf`.
 	dpl := locations.GetRootAsDocPageLocations(buf, 0)
 
-	// For vectors, like `Inventory`, they have a method suffixed with 'Length' that can be used
+	// Vectors, such as `Locations`, have a method suffixed with 'Length' that can be used
 	// to query the length of the vector. You can index the vector by passing an index value
 	// into the accessor.
 	var locs []TextLocation
@@ -127,7 +156,6 @@ func ReadDocPageLocations(buf []byte) (DocPageLocations, error) {
 		locs = append(locs, getTextLocation(&loc))
 	}
 
-	// copy the TextLocation's fields (since these are numbers):
 	return DocPageLocations{
 		dpl.Doc(),
 		dpl.Page(),

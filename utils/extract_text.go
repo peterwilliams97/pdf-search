@@ -1,21 +1,13 @@
 package utils
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/unidoc/unidoc/common"
+	"github.com/unidoc/unidoc/pdf/extractor"
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
-
-// RecoverErrors can be set to true to recover from errors in library functions.
-var RecoverErrors bool
-
-func init() {
-	flag.BoolVar(&RecoverErrors, "r", false, "Recover from errors in library functions.")
-}
 
 // DocID identifies a PDF file.
 type DocID struct {
@@ -38,28 +30,37 @@ type PdfPage struct {
 	Contents string // Page text.
 }
 
-// ExtractDocPages uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
-// of PdfPage. It can recover from errors in the libraries it calls if RecoverErrors is true.
-func ExtractDocPages(inPath string) ([]PdfPage, error) {
-	var docPages []PdfPage
-	var err error
-	if RecoverErrors {
-		defer func() {
-			if r := recover(); r != nil {
-				common.Log.Error("Recover: %q r=%v", inPath, r)
-				fmt.Fprintf(os.Stderr, "Recover: %q r=%v\n", inPath)
-				err = r.(error)
-			}
-		}()
-	}
-	docPages, err = extractDocPages(inPath)
-	return docPages, err
+type LocPage struct {
+	ID        string // Unique identifier. <file hash>.<page number>
+	Name      string // File name.
+	Page      int    // Page number.
+	Contents  string // Page text.
+	Locations []extractor.TextLocation
 }
 
-// extractDocPages uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
-// of PdfPage.
-func extractDocPages(inPath string) ([]PdfPage, error) {
+// type TextLocation struct {
+// 	Offset             uint32
+// 	Llx, Lly, Urx, Ury float32
+// }
 
+// // table DocPageLocations  {
+// // 	doc:       uint64;
+// // 	page:      uint32;
+// // 	locations: [TextLocation];
+// // }
+// type DocPageLocations struct {
+// 	Doc       uint64
+// 	Page      uint32
+// 	Locations []TextLocation
+// }
+
+func (l LocPage) ToPdfPage() PdfPage {
+	return PdfPage{ID: l.ID, Name: l.Name, Page: l.Page, Contents: l.Contents}
+}
+
+// ExtractDocPages uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
+// of PdfPage.
+func ExtractDocPages(inPath string) ([]PdfPage, error) {
 	hash, err := FileHash(inPath)
 	if err != nil {
 		return nil, err
@@ -67,7 +68,7 @@ func extractDocPages(inPath string) ([]PdfPage, error) {
 
 	var docPages []PdfPage
 
-	err = ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return docPages, ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, err := ExtractPageText(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
@@ -88,8 +89,6 @@ func extractDocPages(inPath string) ([]PdfPage, error) {
 		}
 		return nil
 	})
-
-	return docPages, nil
 }
 
 // ExtractDocPagesChan uses UniDoc to extract the text from all pages in PDF file `inPath`.
@@ -104,7 +103,8 @@ func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) 
 	}
 
 	var pagesDone []int
-	err = ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
+
+	return pagesDone, ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, err := ExtractPageText(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
@@ -114,7 +114,7 @@ func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) 
 		if text == "" {
 			return nil
 		}
-		docPages <-  PdfPage{
+		docPages <- PdfPage{
 			ID:       fmt.Sprintf("%s.%d", hash[:10], pageNum),
 			Name:     filepath.Base(inPath),
 			Page:     pageNum,
@@ -126,6 +126,37 @@ func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) 
 		}
 		return nil
 	})
+}
 
-	return pagesDone, nil
+func ExtractDocPagesLookup(inPath string) ([]LocPage, error) {
+
+	hash, err := FileHash(inPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var docPages []LocPage
+
+	return docPages, ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
+		text, locations, err := ExtractPageTextLocation(page)
+		if err != nil {
+			common.Log.Error("ExtractDocPagesLookup: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",
+				inPath, pageNum, err)
+			return err
+		}
+		if text == "" {
+			return nil
+		}
+		docPages = append(docPages, LocPage{
+			ID:        fmt.Sprintf("%s.%d", hash[:10], pageNum),
+			Name:      filepath.Base(inPath),
+			Page:      pageNum,
+			Contents:  text,
+			Locations: locations,
+		})
+		if len(docPages)%100 == 99 {
+			common.Log.Info("\tpageNum=%d docPages=%d %q", pageNum, len(docPages), inPath)
+		}
+		return nil
+	})
 }

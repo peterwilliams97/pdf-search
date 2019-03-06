@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/blevesearch/bleve"
 	"github.com/peterwilliams97/pdf-search/utils"
@@ -41,7 +42,7 @@ func main() {
 	pathList = utils.CleanCorpus(pathList)
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
-	// Create a new index.
+	// Create a new Bleve index.
 	index, err := utils.CreateBleveIndex(indexPath, forceCreate, allowAppend)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", indexPath)
@@ -70,11 +71,21 @@ func indexDocPages(index bleve.Index, inPath string) error {
 		fmt.Printf("indexDocPages: Couldn't extract pages from %q err=%v\n", inPath, err)
 		return nil
 	}
-	for _, page := range docPages {
+	fmt.Printf("indexDocPages: inPath=%q docPages=%d\n", inPath, len(docPages))
+	t0 := time.Now()
+	for i, page := range docPages {
 		err = index.Index(page.ID, page)
+		dt := time.Since(t0)
 		if err != nil {
 			return err
 		}
+		if i%10 == 0 {
+			fmt.Printf("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)\n",
+				i+1, len(docPages), dt.Seconds(), dt.Seconds()/float64(i+1))
+		}
 	}
+	dt := time.Since(t0)
+	fmt.Printf("\tIndexed %d pages in %.1f sec (%.3f sec/page)\n",
+		len(docPages), dt.Seconds(), dt.Seconds()/float64(len(docPages)))
 	return nil
 }

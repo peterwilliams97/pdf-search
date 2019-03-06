@@ -23,8 +23,24 @@ Installation (Bleve)
 	go get github.com/syndtr/goleveldb/leveldb
 	go get github.com/rcrowley/go-metrics
 
-Programs
-========
+Installation (flatbuffers)
+--------------------------
+	brew update
+	brew install flatbuffers --HEAD
+	go get github.com/google/flatbuffers/go
+
+
+Build flatbuffers
+---------------
+	cd $GOPATH/src/github.com/peterwilliams97/pdf-search/serial
+	flatc -g doc_page_locations.fbs
+	pushd $GOPATH/src/github.com/peterwilliams97/pdf-search/serial/cmd/locations
+	go run main.go
+	go test -test.bench .
+
+Example Programs
+================
+
 Basic search
 ------------
 	simple_index.go        Index some PDFs
@@ -91,7 +107,7 @@ used for Lat
 </code>
 
 Concurrent indexing
-------------
+-------------------
 	concurrent_index_doc.go        Index PDFs concurrently. Granularity is PDF file.
 	concurrent_index_page.go       Index PDFs concurrently. Granularity is PDF page.
 
@@ -100,6 +116,13 @@ References
 ==========
 * [Full text search](https://en.wikipedia.org/wiki/Full-text_search)
 * [Information retrieval](https://en.wikipedia.org/wiki/Information_retrieval)
+
+flatbuffers
+-----------
+	https://rwinslow.com/posts/use-flatbuffers-in-golang/
+	https://github.com/google/flatbuffers/blob/master/tests/go_test.go
+	https://google.github.io/flatbuffers/flatbuffers_guide_use_go.html
+
 
 TODO
 ====

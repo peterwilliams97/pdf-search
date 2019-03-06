@@ -8,7 +8,7 @@ type JobCompletion struct {
 	Err   error
 }
 
-// extractPageQueue is a queue of PDF processing jobs.
+// extractPageQueue is a queue of PDF processing jobs and results.
 type extractPageQueue struct {
 	workQueue     chan *extractPageWork  // Work instructions. 1 per PDF file.
 	pageDoneQueue chan ExtractPageResult // Page results. 1 per PDF page succesfully processed.
@@ -34,8 +34,8 @@ func NewExtractPageQueue(numWorkers int) *extractPageQueue {
 // Complete runs `completeJob` on all jobs in `q` and returns when `numJobs` are processed.
 func (q *extractPageQueue) Complete(numJobs int, completeJob func(page ExtractPageResult) error) {
 	numJobsDone := 0
-	numPagesDone := 0
 	numPages := 0
+	numPagesDone := 0
 	for {
 		select {
 		case d := <-q.docDoneQueue:

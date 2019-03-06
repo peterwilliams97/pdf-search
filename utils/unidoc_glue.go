@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/unidoc/unidoc/common"
+	"github.com/unidoc/unidoc/common/license"
 	"github.com/unidoc/unidoc/pdf/extractor"
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
@@ -14,21 +15,23 @@ var (
 	ShowHelp bool
 	Debug    bool
 	Trace    bool
+	// RecoverErrors can be set to true to recover from errors in library functions.
+	RecoverErrors bool
 )
 
 // init sets up UniDoc licensing and logging.
 func init() {
-	// Make sure to enter a valid license key.
-	// Otherwise text is truncated and a watermark added to the text.
-	// License keys are available via: https://unidoc.io
-	// 	err := license.SetLicenseKey(`
-	// -----BEGIN UNIDOC LICENSE KEY-----
-	// ...
-	// -----END UNIDOC LICENSE KEY-----
-	// `, "Customer nae")
-	// 	if err != nil {
-	// 		fmt.Fprintf(os.Stderr, "Error loading UniDoc license: %v\n", err)
-	// 	}
+	err := license.SetLicenseKey(`
+-----BEGIN UNIDOC LICENSE KEY-----
+eyJsaWNlbnNlX2lkIjoiMjA0YWIxMjgtZGY5Yy00ZWE3LTdlM2UtNzJiYTk4OWFhNGZmIiwiY3VzdG9tZXJfaWQiOiJlMDRiODNjZC0zOTYzLTQxNDktNjljOC03MDU0MTM0OWUyMWMiLCJjdXN0b21lcl9uYW1lIjoiUGFwZXJjdXQiLCJ0eXBlIjoiY29tbWVyY2lhbCIsInRpZXIiOiJidXNpbmVzc191bmxpbWl0ZWQiLCJmZWF0dXJlcyI6WyJ1bmlkb2MiLCJ1bmlkb2MtY2xpIl0sImNyZWF0ZWRfYXQiOjE0ODU0NzUxOTksImV4cGlyZXNfYXQiOjE1MTcwMTExOTksImNyZWF0b3JfbmFtZSI6IlVuaURvYyBTdXBwb3J0IiwiY3JlYXRvcl9lbWFpbCI6InN1cHBvcnRAdW5pZG9jLmlvIn0=
++
+JYUUjfjjpek96Rh2LoPy4LbWEHT5X46PxLyNkMyF74L/eNeLR55vcvvi2MIUtZBamCbay+YjmqZu5n6IJQWVDrImdC3b7OthoSdGMvfNSjOSuQcoV/mFpkMYin34Uwe7KM6EebzCuX2LF/LTPpdL6iYHtiWxTnF3yZwFqSgJLa8NSSSElfVLidbfQHYJSu52FTcqqWaqIjT51YiZB0Pq54YDP/jS10sRDYDe3sOpI1bfFplYkcdxPX1tK0AQKbvYCDcNbbnoKhk0EZAVSmI+kh5TdKzUn3BpQc7MP+koGrAePc3ddZF6pNzaiW1CJiO7/TmRzQioEq3Rp/h1XYkKXw==
+-----END UNIDOC LICENSE KEY-----
+`,
+		"PaperCut")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading UniDoc license: %v\n", err)
+	}
 	pdf.SetPdfCreator("PDF Search")
 
 	flag.BoolVar(&ShowHelp, "h", false, "Show this help message.")
@@ -37,6 +40,7 @@ func init() {
 	if Trace {
 		Debug = true
 	}
+	flag.BoolVar(&RecoverErrors, "r", false, "Recover from errors in library functions.")
 }
 
 func SetLogging() {
@@ -96,30 +100,55 @@ func PageSizePt(page *pdf.PdfPage) (width, height float64, err error) {
 
 // ExtractPageText returns the text on page `page`.
 func ExtractPageText(page *pdf.PdfPage) (string, error) {
-	textList, err := ExtractPageTextList(page)
+	textList, err := ExtractPageTextObject(page)
 	if err != nil {
 		return "", err
 	}
-	return textList.ToText(), err
+	return textList.ToText(), nil
 }
 
-// ExtractPageTextList returns the PageText on page `page`.
+// ExtractPageTextLocation returns the text on page `page`.
+func ExtractPageTextLocation(page *pdf.PdfPage) (string, []extractor.TextLocation, error) {
+	textList, err := ExtractPageTextObject(page)
+	if err != nil {
+		return "", nil, err
+	}
+	text, location := textList.ToTextLocation()
+	return text, location, nil
+}
+
+// ExtractPageTextObject returns the PageText on page `page`.
 // PageText is an opaque UniDoc struct that describes the text marks on a PDF page.
-func ExtractPageTextList(page *pdf.PdfPage) (*extractor.PageText, error) {
+// extractDocPages uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
+// of PdfPage.
+func ExtractPageTextObject(page *pdf.PdfPage) (*extractor.PageText, error) {
 	ex, err := extractor.New(page)
 	if err != nil {
-		fmt.Printf("ExtractPageTextList: extractor.New failed. err=%v\n", err)
 		return nil, err
 	}
 	pageText, _, _, err := ex.ExtractPageText()
-	if err != nil {
-		fmt.Printf("ExtractPageTextList: ExtractPageText failed. err=%v\n", err)
-	}
 	return pageText, err
 }
 
 // ProcessPDFPages runs `processPage` on every page in PDF file `inPath`.
+// It can recover from errors in the libraries it calls if RecoverErrors is true.
 func ProcessPDFPages(inPath string, processPage func(pageNum int, page *pdf.PdfPage) error) error {
+	var err error
+	if RecoverErrors {
+		defer func() {
+			if r := recover(); r != nil {
+				common.Log.Error("Recover: %q r=%v", inPath, r)
+				fmt.Fprintf(os.Stderr, "Recover: %q r=%v\n", inPath)
+				err = r.(error)
+			}
+		}()
+	}
+	err = processPDFPages(inPath, processPage)
+	return err
+}
+
+// processPDFPages runs `processPage` on every page in PDF file `inPath`.
+func processPDFPages(inPath string, processPage func(pageNum int, page *pdf.PdfPage) error) error {
 	pdfReader, err := PdfOpen(inPath)
 	if err != nil {
 		common.Log.Error("ProcessPDFPages: Could not open inPath=%q. err=%v", inPath, err)
@@ -129,6 +158,8 @@ func ProcessPDFPages(inPath string, processPage func(pageNum int, page *pdf.PdfP
 	if err != nil {
 		return err
 	}
+
+	common.Log.Info("processPDFPages: inPath=%q numPages=%d", inPath, numPages)
 
 	for pageNum := 1; pageNum < numPages; pageNum++ {
 		page, err := pdfReader.GetPage(pageNum)

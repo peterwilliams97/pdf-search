@@ -36,6 +36,9 @@ func PatternsToPaths(patternList []string, sortSize bool) ([]string, error) {
 	if sortSize {
 		pathList = SortFileSize(pathList, -1, -1)
 	}
+	// if len(pathList) > 10 {
+	// 	pathList = pathList[:10]
+	// }
 	return pathList, nil
 }
 

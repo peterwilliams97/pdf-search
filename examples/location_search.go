@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/blevesearch/bleve"
@@ -11,12 +13,15 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-var indexPath = "store.location"
+var basePath = "store.xxx"
 
 func main() {
-	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
+	flag.StringVar(&basePath, "s", basePath, "Bleve store name. This is a directory.")
+	indexPath := filepath.Join(basePath, "bleve")
+	// locationsPath := filepath.Join(basePath, "locations")
+	// hashPath := filepath.Join(basePath, "file_hash.json")
 	utils.MakeUsage(`Usage: go run location_search.go [OPTIONS] Adobe PDF
-Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
+Performs a full text search for "Adobe PDF" in Bleve index "store.location" that was created with
 simple_index.go`)
 	utils.SetLogging()
 	flag.Parse()
@@ -36,6 +41,17 @@ simple_index.go`)
 	index, err := bleve.Open(indexPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", indexPath)
+		panic(err)
+	}
+	b, err := ioutil.ReadAll(locationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open locations %q.\n", locationsPath)
+		panic(err)
+	}
+
+	hs, err := utils.OpenLocationsState(basePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not oopen hash file %q. err=%v\n", basePath, err)
 		panic(err)
 	}
 
