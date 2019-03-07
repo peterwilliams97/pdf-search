@@ -38,7 +38,7 @@ func main() {
 	term := strings.Join(flag.Args(), " ")
 	fmt.Printf("term=%q\n", term)
 
-	lState, err := utils.OpenPositionsState(basePath)
+	lState, err := utils.OpenPositionsState(basePath, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open positions file %q. err=%v\n", basePath, err)
 		panic(err)

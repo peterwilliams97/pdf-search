@@ -83,6 +83,10 @@ func ChangePathExt(inPath, outExt string) string {
 
 // RemoveDirectory recursively removes directory `dir` and its contents from disk.
 func RemoveDirectory(dir string) error {
+	if dir == "" || strings.HasPrefix(dir, ".") || strings.HasPrefix(dir, "/") {
+		full, _ := filepath.Abs(dir)
+		panic(fmt.Errorf("RemoveDirectory: Suspicious dir=%q (%q)", dir, full))
+	}
 	d, err := os.Open(dir)
 	if err != nil {
 		return err

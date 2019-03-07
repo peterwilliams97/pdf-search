@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"path/filepath"
 
 	"github.com/blevesearch/bleve"
@@ -36,9 +35,6 @@ func removeIndex(indexPath string) {
 		common.Log.Error("%q doesn't appear to a be a Bleve index. %q doesn't exist.",
 			indexPath, metaPath)
 		return
-	}
-	if indexPath == "." || indexPath == "/" {
-		panic(fmt.Errorf("Suspicious indexPath=%q", indexPath))
 	}
 	if err := RemoveDirectory(indexPath); err != nil {
 		common.Log.Error("RemoveDirectory(%q) failed. err=%v", indexPath, err)

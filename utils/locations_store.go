@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -53,19 +54,29 @@ const hashUpdatePeriodSec = 1.0
 
 // PositionsState is the global state of a writer or reader to the position indexes saved to disk.
 type PositionsState struct {
-	root         string            // top level directory of the data saved to disk
-	fileList     []FileDesc        // list of file entries
-	hashIndex    map[string]uint64 // {file hash: index into fileList}
-	indexHash    map[uint64]string // {index into fileList: file hash}
-	hashPath     map[string]string // {file hash: file path}
-	updateTime   time.Time         // Time of last Flush()
-	positionsDir string            // <root>/positions
+	root       string            // top level directory of the data saved to disk
+	fileList   []FileDesc        // list of file entries
+	hashIndex  map[string]uint64 // {file hash: index into fileList}
+	indexHash  map[uint64]string // {index into fileList: file hash}
+	hashPath   map[string]string // {file hash: file path}
+	updateTime time.Time         // Time of last Flush()
+	// positionsDir string            // <root>/positions
+}
+
+func (lState PositionsState) positionsDir() string {
+	return filepath.Join(lState.root, "positions")
 }
 
 // OpenPositionsState loads indexes from an existing locations directory `root` or creates one if it
 // doesn't exist.
-func OpenPositionsState(root string) (*PositionsState, error) {
+func OpenPositionsState(root string, forceCreate bool) (*PositionsState, error) {
 	lState := PositionsState{root: root}
+	if forceCreate {
+		if err := lState.removePositionsState(); err != nil {
+			return nil, err
+		}
+	}
+
 	filename := lState.fileListPath()
 	fileList, err := loadFileList(filename)
 	if err != nil {
@@ -79,14 +90,15 @@ func OpenPositionsState(root string) (*PositionsState, error) {
 		indexHash[uint64(i)] = hip.Hash
 		hashPath[hip.Hash] = hip.InPath
 	}
+	lState.fileList = fileList
+	lState.hashIndex = hashIndex
+	lState.indexHash = indexHash
+	lState.hashPath = hashPath
 
-	return &PositionsState{
-		root:      root,
-		fileList:  fileList,
-		hashIndex: hashIndex,
-		indexHash: indexHash,
-		hashPath:  hashPath,
-	}, nil
+	fmt.Printf("**** lState=%+v\n", lState)
+	// panic("GGGG")
+
+	return &lState, nil
 }
 
 func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageText, error) {
@@ -95,14 +107,8 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		panic(err)
 		return nil, err
 	}
-	docIdx, p, exists := lState.AddFile(fd)
-	if exists {
-		common.Log.Error("ExtractDocPagePositions: %q is the same PDF as %q. Ignoring", inPath, p)
-		panic(err)
-		return nil, errors.New("duplicate PDF")
-	}
 
-	lDoc, err := lState.CreatePositionsDoc(docIdx)
+	lDoc, err := lState.CreatePositionsDoc(fd)
 	if err != nil {
 		panic(err)
 		return nil, err
@@ -133,7 +139,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			return err
 		}
 		docPages = append(docPages, DocPageText{
-			DocIdx:  docIdx,
+			DocIdx:  lDoc.docIdx,
 			PageIdx: pageIdx,
 			PageNum: pageNum,
 			Text:    text,
@@ -154,7 +160,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 }
 
 // addFile adds PDF file `fd` to `lState`. fileList.
-func (lState *PositionsState) AddFile(fd FileDesc) (uint64, string, bool) {
+func (lState *PositionsState) addFile(fd FileDesc) (uint64, string, bool) {
 	hash := fd.Hash
 	idx, ok := lState.hashIndex[hash]
 	if ok {
@@ -185,22 +191,46 @@ func (lState *PositionsState) fileListPath() string {
 	return filepath.Join(lState.root, "file_list.json")
 }
 
+// removePositionsState removes the PositionsState persistent data in the directory tree under
+// `root` from disk.
+func (lState *PositionsState) removePositionsState() error {
+	if !Exists(lState.root) {
+		return nil
+	}
+	flPath := lState.fileListPath()
+	if !Exists(flPath) {
+		common.Log.Error("%q doesn't appear to a be a PositionsState directory. %q doesn't exist.",
+			lState.root, flPath)
+		return errors.New("not a PositionsState directory")
+	}
+	err := RemoveDirectory(lState.root)
+	if err != nil {
+		common.Log.Error("RemoveDirectory(%q) failed. err=%v", lState.root, err)
+	}
+	return err
+}
+
 // docPath returns the file path to the positions files for PDF with hash `hash`.
 func (lState *PositionsState) docPath(hash string) string {
-	return filepath.Join(lState.positionsDir, hash)
+	common.Log.Info("docPath: %q %s", lState.positionsDir(), hash)
+	// if lState.positionsDir == "" {
+	// 	panic(hash)
+	// }
+	return filepath.Join(lState.positionsDir(), hash)
 }
 
 // createIfNecessary creates `lState`.positionsDir if it doesn't already exist.
 // It is called at the start of CreatePositionsDoc() which allows us to avoid creating our directory
 // structure until we have successfully extracted the text from a PDF pages.
 func (lState *PositionsState) createIfNecessary() error {
-	common.Log.Info("createIfNecessary: 1 positionsDir=%q", lState.positionsDir)
-	if lState.positionsDir != "" {
+	d := lState.positionsDir()
+	common.Log.Info("createIfNecessary: 1 positionsDir=%q", d)
+	if Exists(d) {
 		return nil
 	}
-	lState.positionsDir = filepath.Join(lState.root, "positions")
-	common.Log.Info("createIfNecessary: 2 positionsDir=%q", lState.positionsDir)
-	err := MkDir(lState.positionsDir)
+	// lState.positionsDir = filepath.Join(lState.root, "positions")
+	// common.Log.Info("createIfNecessary: 2 positionsDir=%q", lState.positionsDir)
+	err := MkDir(d)
 	common.Log.Info("createIfNecessary: err=%v", err)
 	return err
 }
@@ -217,10 +247,11 @@ type byteSpan struct {
 // DocPositions tracks the data that is used to index a PDF file.
 type DocPositions struct {
 	lState    *PositionsState // State of whole store.
-	dataFile  *os.File        // Positions are stored in this file.
-	spans     []byteSpan      // Indexes into `dataFile`. These is a byteSpan per page.
-	dataPath  string          // Path of `dataFile`.
-	spansPath string          // Path where `spans` is saved
+	docIdx    uint64
+	dataFile  *os.File   // Positions are stored in this file.
+	spans     []byteSpan // Indexes into `dataFile`. These is a byteSpan per page.
+	dataPath  string     // Path of `dataFile`.
+	spansPath string     // Path where `spans` is saved
 }
 
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
@@ -234,12 +265,28 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 	return lDoc.ReadDocPagePositions(pageIdx)
 }
 
-func (lState *PositionsState) CreatePositionsDoc(docIdx uint64) (*DocPositions, error) {
+// CreatePositionsDoc opens lDoc.dataPath for writing.
+func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, error) {
+	common.Log.Info("CreatePositionsDoc: lState.positionsDir=%q", lState.positionsDir())
+	docIdx, p, exists := lState.addFile(fd)
+	if exists {
+		common.Log.Error("ExtractDocPagePositions: %q is the same PDF as %q. Ignoring",
+			fd.InPath, p)
+		panic(errors.New("duplicate PDF"))
+		return nil, errors.New("duplicate PDF")
+	}
 	lDoc := lState.baseFields(docIdx)
 
 	err := lState.createIfNecessary()
 	if err != nil {
 		panic(err)
+	}
+	if strings.HasPrefix(lDoc.dataPath, "9") {
+		common.Log.Error("lState.positionsDir=%q", lState.positionsDir())
+		panic(lDoc.dataPath)
+	}
+	if lState.positionsDir() == "" {
+		panic("gggg")
 	}
 	lDoc.dataFile, err = os.Create(lDoc.dataPath)
 	if err != nil {
@@ -287,11 +334,14 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	// if err != nil {
 	// 	panic(err)
 	// }
-	return &DocPositions{
+	dp := DocPositions{
 		lState:    lState,
+		docIdx:    docIdx,
 		dataPath:  dataPath,
 		spansPath: spansPath,
 	}
+	common.Log.Info("baseFields: docIdx=%d dp=%+v", docIdx, dp)
+	return &dp
 }
 
 func (lDoc *DocPositions) Save() error {

@@ -46,7 +46,7 @@ func main() {
 	pathList = utils.CleanCorpus(pathList)
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
-	hs, err := utils.OpenPositionsState(basePath)
+	hs, err := utils.OpenPositionsState(basePath, forceCreate)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open hash file %q. err=%v\n", basePath, err)
 		panic(err)
