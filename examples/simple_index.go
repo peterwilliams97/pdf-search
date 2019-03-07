@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/blevesearch/bleve"
@@ -13,10 +14,11 @@ import (
 const usage = `Usage: go run simple_index.go [OPTIONS] PDF32000_2008.pdf
 Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`
 
-var indexPath = "store.simple"
+var basePath = "store.simple"
 
 func main() {
-	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
+	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
+	indexPath := filepath.Join(basePath, "bleve")
 	var forceCreate, allowAppend bool
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
@@ -32,6 +34,8 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	fmt.Printf("indexPath=%q\n", indexPath)
 
 	// Read the list of PDF files that will be processed.
 	pathList, err := utils.PatternsToPaths(flag.Args(), true)
@@ -82,10 +86,12 @@ func indexDocPages(index bleve.Index, inPath string) error {
 		if i%10 == 0 {
 			fmt.Printf("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)\n",
 				i+1, len(docPages), dt.Seconds(), dt.Seconds()/float64(i+1))
+			fmt.Printf("\tid=%q text=%d\n", page.ID, len(page.Contents))
 		}
 	}
 	dt := time.Since(t0)
 	fmt.Printf("\tIndexed %d pages in %.1f sec (%.3f sec/page)\n",
 		len(docPages), dt.Seconds(), dt.Seconds()/float64(len(docPages)))
+
 	return nil
 }

@@ -50,7 +50,7 @@ import (
           ...
 */
 
-const hashUpdatePeriodSec = 1.0
+const storeUpdatePeriodSec = 60.0
 
 // PositionsState is the global state of a writer or reader to the position indexes saved to disk.
 type PositionsState struct {
@@ -60,7 +60,6 @@ type PositionsState struct {
 	indexHash  map[uint64]string // {index into fileList: file hash}
 	hashPath   map[string]string // {file hash: file path}
 	updateTime time.Time         // Time of last Flush()
-	// positionsDir string            // <root>/positions
 }
 
 func (lState PositionsState) positionsDir() string {
@@ -69,6 +68,9 @@ func (lState PositionsState) positionsDir() string {
 
 // OpenPositionsState loads indexes from an existing locations directory `root` or creates one if it
 // doesn't exist.
+// When opening for writing, do this to ensure final index is written to disk:
+//    lState, err := utils.OpenPositionsState(basePath, forceCreate)
+//    defer lState.Flush()
 func OpenPositionsState(root string, forceCreate bool) (*PositionsState, error) {
 	lState := PositionsState{root: root}
 	if forceCreate {
@@ -94,9 +96,9 @@ func OpenPositionsState(root string, forceCreate bool) (*PositionsState, error) 
 	lState.hashIndex = hashIndex
 	lState.indexHash = indexHash
 	lState.hashPath = hashPath
+	lState.updateTime = time.Now()
 
-	fmt.Printf("**** lState=%+v\n", lState)
-	// panic("GGGG")
+	fmt.Fprintf(os.Stderr, "lState=%q %d\n", lState.root, len(lState.fileList))
 
 	return &lState, nil
 }
@@ -110,7 +112,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 
 	lDoc, err := lState.CreatePositionsDoc(fd)
 	if err != nil {
-		panic(err)
+		// panic(err)
 		return nil, err
 	}
 
@@ -121,6 +123,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		if err != nil {
 			common.Log.Error("ExtractDocPagePositions: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",
 				inPath, pageNum, err)
+			return nil // !@#$ Skip errors for now
 			panic(err)
 			return err
 		}
@@ -159,30 +162,36 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 	return docPages, err
 }
 
-// addFile adds PDF file `fd` to `lState`. fileList.
+// addFile adds PDF file `fd` to `lState`.fileList.
+// returns: docIdx, inPath, exists
+//     docIdx: Index of PDF file in `lState`.fileList.
+//     inPath: Path to file. This the first path this file was added to the index with.
+//     exists: true if `fd` was already in lState`.fileList.
 func (lState *PositionsState) addFile(fd FileDesc) (uint64, string, bool) {
 	hash := fd.Hash
-	idx, ok := lState.hashIndex[hash]
+	docIdx, ok := lState.hashIndex[hash]
 	if ok {
-		return idx, lState.hashPath[hash], true
+		return docIdx, lState.hashPath[hash], true
 	}
 	lState.fileList = append(lState.fileList, fd)
-	idx = uint64(len(lState.fileList) - 1)
-	lState.hashIndex[hash] = idx
-	lState.indexHash[idx] = hash
+	docIdx = uint64(len(lState.fileList) - 1)
+	lState.hashIndex[hash] = docIdx
+	lState.indexHash[docIdx] = hash
 	lState.hashPath[hash] = fd.InPath
 	dt := time.Since(lState.updateTime)
 	// fmt.Fprintf(os.Stderr, "*00 Flush: %s %.1f sec\n", lState.updateTime, dt.Seconds())
-	if dt.Seconds() > hashUpdatePeriodSec {
+	if dt.Seconds() > storeUpdatePeriodSec {
 		lState.Flush()
-		fmt.Fprintf(os.Stderr, "*** Flush: %s (%.1f sec) %d elements\n",
-			lState.updateTime, dt.Seconds(), idx)
 		lState.updateTime = time.Now()
 	}
-	return idx, fd.InPath, false
+	return docIdx, fd.InPath, false
 }
 
 func (lState *PositionsState) Flush() error {
+	dt := time.Since(lState.updateTime)
+	docIdx := uint64(len(lState.fileList) - 1)
+	fmt.Fprintf(os.Stderr, "*** Flush %3d files (%4.1f sec) %s\n",
+		docIdx+1, dt.Seconds(), lState.updateTime)
 	return saveFileList(lState.fileListPath(), lState.fileList)
 }
 
@@ -198,7 +207,7 @@ func (lState *PositionsState) removePositionsState() error {
 		return nil
 	}
 	flPath := lState.fileListPath()
-	if !Exists(flPath) {
+	if !Exists(flPath) && !strings.HasPrefix(flPath, "store.") {
 		common.Log.Error("%q doesn't appear to a be a PositionsState directory. %q doesn't exist.",
 			lState.root, flPath)
 		return errors.New("not a PositionsState directory")
@@ -212,7 +221,7 @@ func (lState *PositionsState) removePositionsState() error {
 
 // docPath returns the file path to the positions files for PDF with hash `hash`.
 func (lState *PositionsState) docPath(hash string) string {
-	common.Log.Info("docPath: %q %s", lState.positionsDir(), hash)
+	common.Log.Trace("docPath: %q %s", lState.positionsDir(), hash)
 	// if lState.positionsDir == "" {
 	// 	panic(hash)
 	// }
@@ -224,14 +233,14 @@ func (lState *PositionsState) docPath(hash string) string {
 // structure until we have successfully extracted the text from a PDF pages.
 func (lState *PositionsState) createIfNecessary() error {
 	d := lState.positionsDir()
-	common.Log.Info("createIfNecessary: 1 positionsDir=%q", d)
+	common.Log.Trace("createIfNecessary: 1 positionsDir=%q", d)
 	if Exists(d) {
 		return nil
 	}
 	// lState.positionsDir = filepath.Join(lState.root, "positions")
 	// common.Log.Info("createIfNecessary: 2 positionsDir=%q", lState.positionsDir)
 	err := MkDir(d)
-	common.Log.Info("createIfNecessary: err=%v", err)
+	common.Log.Trace("createIfNecessary: err=%v", err)
 	return err
 }
 
@@ -267,12 +276,12 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 
 // CreatePositionsDoc opens lDoc.dataPath for writing.
 func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, error) {
-	common.Log.Info("CreatePositionsDoc: lState.positionsDir=%q", lState.positionsDir())
+	common.Log.Debug("CreatePositionsDoc: lState.positionsDir=%q", lState.positionsDir())
 	docIdx, p, exists := lState.addFile(fd)
 	if exists {
 		common.Log.Error("ExtractDocPagePositions: %q is the same PDF as %q. Ignoring",
 			fd.InPath, p)
-		panic(errors.New("duplicate PDF"))
+		// panic(errors.New("duplicate PDF"))
 		return nil, errors.New("duplicate PDF")
 	}
 	lDoc := lState.baseFields(docIdx)
@@ -340,7 +349,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 		dataPath:  dataPath,
 		spansPath: spansPath,
 	}
-	common.Log.Info("baseFields: docIdx=%d dp=%+v", docIdx, dp)
+	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp
 }
 

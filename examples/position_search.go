@@ -18,7 +18,7 @@ const usage = `Usage: go run location_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.location" that was created with
 simple_index.go`
 
-var basePath = "store.xxx"
+var basePath = "store.position"
 
 func main() {
 	flag.StringVar(&basePath, "s", basePath, "Bleve store name. This is a directory.")
@@ -40,7 +40,7 @@ func main() {
 
 	lState, err := utils.OpenPositionsState(basePath, false)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open positions file %q. err=%v\n", basePath, err)
+		fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
 		panic(err)
 	}
 

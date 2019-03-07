@@ -15,12 +15,13 @@ import (
 const usage = `Usage: go run location_index.go [OPTIONS] PDF32000_2008.pdf
 Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`
 
-var basePath = "store.xxx"
+var basePath = "store.simple"
+var minFileNum = -1
+var maxFileNum = -1
 
 func main() {
 	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
 	indexPath := filepath.Join(basePath, "bleve")
-	// locationsPath := filepath.Join(basePath, "locations")
 	var forceCreate, allowAppend bool
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
@@ -37,6 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("indexPath=%q\n", indexPath)
 	// Read the list of PDF files that will be processed.
 	pathList, err := utils.PatternsToPaths(flag.Args(), true)
 	if err != nil {
@@ -44,14 +46,15 @@ func main() {
 		os.Exit(1)
 	}
 	pathList = utils.CleanCorpus(pathList)
+
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
-	hs, err := utils.OpenPositionsState(basePath, forceCreate)
+	lState, err := utils.OpenPositionsState(basePath, forceCreate)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open hash file %q. err=%v\n", basePath, err)
+		fmt.Fprintf(os.Stderr, "Could not create positions store %q. err=%v\n", basePath, err)
 		panic(err)
 	}
-	defer hs.Flush()
+	defer lState.Flush()
 
 	// Create a new Bleve index.
 	index, err := utils.CreateBleveIndex(indexPath, forceCreate, allowAppend)
@@ -61,8 +64,15 @@ func main() {
 	}
 
 	// Add the pages of all the PDFs in `pathList` to `index`.
-	for _, inPath := range pathList {
-		err := indexDocPagesLoc(index, hs, inPath)
+	for i, inPath := range pathList {
+		if minFileNum > 0 && i+1 < minFileNum {
+			continue
+		}
+		if maxFileNum > 0 && i+1 > maxFileNum {
+			break
+		}
+		fmt.Fprintf(os.Stderr, ">> %3d of %d: %q\n", i+1, len(pathList), inPath)
+		err := indexDocPagesLoc(index, lState, inPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not index %q.\n", inPath)
 			panic(err)
@@ -82,8 +92,8 @@ type IDText struct {
 }
 
 // indexDocPagesLoc adds the text of all the pages in PDF file `inPath` to Bleve index `index`.
-func indexDocPagesLoc(index bleve.Index, hs *utils.PositionsState, inPath string) error {
-	docPages, err := hs.ExtractDocPagePositions(inPath)
+func indexDocPagesLoc(index bleve.Index, lState *utils.PositionsState, inPath string) error {
+	docPages, err := lState.ExtractDocPagePositions(inPath)
 	if err != nil {
 		fmt.Printf("indexDocPagesLoc: Couldn't extract pages from %q err=%v\n", inPath, err)
 		return nil
@@ -110,6 +120,7 @@ func indexDocPagesLoc(index bleve.Index, hs *utils.PositionsState, inPath string
 		if i%10 == 0 {
 			fmt.Printf("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)\n",
 				i+1, len(docPages), dt.Seconds(), dt.Seconds()/float64(i+1))
+			fmt.Printf("\tid=%q text=%d\n", id, len(idText.Text))
 		}
 	}
 	dt := time.Since(t0)

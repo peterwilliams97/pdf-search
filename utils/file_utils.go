@@ -266,4 +266,7 @@ var badFiles = []string{
 	"commercial-invoice-template-230kb.pdf",  // r=invalid pad length
 	"CGU_Motor_Vehicle_Insurance_Policy.pdf", // r=invalid pad length
 	"Forerunner_230_OM_EN.pdf} r=invalid",    // r=invalid pad length
+	"transitions_test.pdf",                   //required attribute missing (No /Type/Font )
+	"page_tree_multiple_levels.pdf",          //required attribute missing
+
 }

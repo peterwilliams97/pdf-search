@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/blevesearch/bleve"
@@ -15,10 +16,11 @@ const usage = `Usage: go run simple_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
 simple_index.go`
 
-var indexPath = "store.simple"
+var basePath = "store.simple"
 
 func main() {
-	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
+	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
+	indexPath := filepath.Join(basePath, "bleve")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
@@ -33,6 +35,7 @@ func main() {
 
 	term := strings.Join(flag.Args(), " ")
 	fmt.Printf("term=%q\n", term)
+	fmt.Printf("indexPath=%q\n", indexPath)
 
 	// Open existing index.
 	index, err := bleve.Open(indexPath)
