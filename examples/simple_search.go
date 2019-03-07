@@ -11,13 +11,15 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
+const usage = `Usage: go run simple_search.go [OPTIONS] Adobe PDF
+Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
+simple_index.go`
+
 var indexPath = "store.simple"
 
 func main() {
 	flag.StringVar(&indexPath, "s", indexPath, "Bleve store name. This is a directory.")
-	utils.MakeUsage(`Usage: go run simple_search.go [OPTIONS] Adobe PDF
-Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
-simple_index.go`)
+	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
 	if utils.ShowHelp {
