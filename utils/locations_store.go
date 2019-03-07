@@ -19,12 +19,12 @@ import (
 )
 
 /*
-   LocationsState is for serializing and accesing DocPageLocations
+   PositionsState is for serializing and accesing DocPageLocations.
 
-   Locations are read from disk a page at a time by ReadLocations which returns the
+   Positions are read from disk a page at a time by ReadPositions which returns the
    []DocPageLocations for the PDF page given by `doc` and `page`.
 
-   func (lState *LocationsState) ReadLocations(doc uint64, page uint32) ([]DocPageLocations, error)
+   func (lState *PositionsState) ReadPositions(doc uint64, page uint32) ([]DocPageLocations, error)
 
    We use this to allow an efficient look up of DocPageLocation of an offset within a page's text.
    1) Look up []DocPageLocations for the PDF page given by `doc` and `page`
@@ -34,14 +34,14 @@ import (
    -----------------
    1 data file + 1 index file per document.
    index file is small and contains offsets of pages in data file. It is made up of
-     IndexEntry (12 byte data structure)
+     byteSpan (12 byte data structure)
          offset uint32
          size   uint32
          check  uint32
 
    <root>/
       file_list.json
-      locations/
+      positions/
           <hash1>.dat
           <hash1>.idx
           <hash2>.dat
@@ -51,19 +51,21 @@ import (
 
 const hashUpdatePeriodSec = 1.0
 
-type LocationsState struct {
+// PositionsState is the global state of a writer or reader to the position indexes saved to disk.
+type PositionsState struct {
 	root         string            // top level directory of the data saved to disk
 	fileList     []FileDesc        // list of file entries
 	hashIndex    map[string]uint64 // {file hash: index into fileList}
 	indexHash    map[uint64]string // {index into fileList: file hash}
 	hashPath     map[string]string // {file hash: file path}
-	updateTime   time.Time
-	locationsDir string
+	updateTime   time.Time         // Time of last Flush()
+	positionsDir string            // <root>/positions
 }
 
-// OpenLocationsState loads indexe from an existing locations directory `root`.
-func OpenLocationsState(root string) (*LocationsState, error) {
-	lState := LocationsState{root: root}
+// OpenPositionsState loads indexes from an existing locations directory `root` or creates one if it
+// doesn't exist.
+func OpenPositionsState(root string) (*PositionsState, error) {
+	lState := PositionsState{root: root}
 	filename := lState.fileListPath()
 	fileList, err := loadFileList(filename)
 	if err != nil {
@@ -78,7 +80,7 @@ func OpenLocationsState(root string) (*LocationsState, error) {
 		hashPath[hip.Hash] = hip.InPath
 	}
 
-	return &LocationsState{
+	return &PositionsState{
 		root:      root,
 		fileList:  fileList,
 		hashIndex: hashIndex,
@@ -87,7 +89,7 @@ func OpenLocationsState(root string) (*LocationsState, error) {
 	}, nil
 }
 
-func (lState *LocationsState) ExtractDocPagesLookup2(inPath string) ([]Loc2Page, error) {
+func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageText, error) {
 	fd, err := CreateFileDesc(inPath)
 	if err != nil {
 		panic(err)
@@ -95,23 +97,23 @@ func (lState *LocationsState) ExtractDocPagesLookup2(inPath string) ([]Loc2Page,
 	}
 	docIdx, p, exists := lState.AddFile(fd)
 	if exists {
-		common.Log.Error("ExtractDocPagesLookup2: %q is the same PDF as %q. Ignoring", inPath, p)
+		common.Log.Error("ExtractDocPagePositions: %q is the same PDF as %q. Ignoring", inPath, p)
 		panic(err)
 		return nil, errors.New("duplicate PDF")
 	}
 
-	lDoc, err := lState.CreateLocationsDoc(docIdx)
+	lDoc, err := lState.CreatePositionsDoc(docIdx)
 	if err != nil {
 		panic(err)
 		return nil, err
 	}
 
-	var docPages []Loc2Page
+	var docPages []DocPageText
 
 	err = ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, locations, err := ExtractPageTextLocation(page)
 		if err != nil {
-			common.Log.Error("ExtractDocPagesLookup2: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",
+			common.Log.Error("ExtractDocPagePositions: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",
 				inPath, pageNum, err)
 			panic(err)
 			return err
@@ -130,9 +132,10 @@ func (lState *LocationsState) ExtractDocPagesLookup2(inPath string) ([]Loc2Page,
 			panic(err)
 			return err
 		}
-		docPages = append(docPages, Loc2Page{
+		docPages = append(docPages, DocPageText{
 			DocIdx:  docIdx,
 			PageIdx: pageIdx,
+			PageNum: pageNum,
 			Text:    text,
 		})
 		if len(docPages)%100 == 99 {
@@ -151,7 +154,7 @@ func (lState *LocationsState) ExtractDocPagesLookup2(inPath string) ([]Loc2Page,
 }
 
 // addFile adds PDF file `fd` to `lState`. fileList.
-func (lState *LocationsState) AddFile(fd FileDesc) (uint64, string, bool) {
+func (lState *PositionsState) AddFile(fd FileDesc) (uint64, string, bool) {
 	hash := fd.Hash
 	idx, ok := lState.hashIndex[hash]
 	if ok {
@@ -173,50 +176,65 @@ func (lState *LocationsState) AddFile(fd FileDesc) (uint64, string, bool) {
 	return idx, fd.InPath, false
 }
 
-func (lState *LocationsState) Flush() error {
+func (lState *PositionsState) Flush() error {
 	return saveFileList(lState.fileListPath(), lState.fileList)
 }
 
 // fileListPath is the path where lState.fileList is stored on disk.
-func (lState *LocationsState) fileListPath() string {
+func (lState *PositionsState) fileListPath() string {
 	return filepath.Join(lState.root, "file_list.json")
 }
 
-// locationsPath returns the file path to the locations file for PDF with hash `hash`.
-func (lState *LocationsState) locationsPath(hash string) string {
-	return filepath.Join(lState.locationsDir, hash)
+// docPath returns the file path to the positions files for PDF with hash `hash`.
+func (lState *PositionsState) docPath(hash string) string {
+	return filepath.Join(lState.positionsDir, hash)
 }
 
-func (lState *LocationsState) createIfNecessary() error {
-	common.Log.Info("createIfNecessary: 1 locationsDir=%q", lState.locationsDir)
-	if lState.locationsDir != "" {
+// createIfNecessary creates `lState`.positionsDir if it doesn't already exist.
+// It is called at the start of CreatePositionsDoc() which allows us to avoid creating our directory
+// structure until we have successfully extracted the text from a PDF pages.
+func (lState *PositionsState) createIfNecessary() error {
+	common.Log.Info("createIfNecessary: 1 positionsDir=%q", lState.positionsDir)
+	if lState.positionsDir != "" {
 		return nil
 	}
-	lState.locationsDir = filepath.Join(lState.root, "locations")
-	common.Log.Info("createIfNecessary: 2 locationsDir=%q", lState.locationsDir)
-	err := MkDir(lState.locationsDir)
+	lState.positionsDir = filepath.Join(lState.root, "positions")
+	common.Log.Info("createIfNecessary: 2 positionsDir=%q", lState.positionsDir)
+	err := MkDir(lState.positionsDir)
 	common.Log.Info("createIfNecessary: err=%v", err)
 	return err
 }
 
-//
-//
-//
-type IndexEntry struct {
-	Offset uint32
-	Size   uint32
-	Check  uint32
+// byteSpan is the location of the bytes of a DocPageLocations in a data file.
+// The span is over [Offset, Offset+Size).
+// There is one byteSpan (corresponding to a DocPageLocations) per page.
+type byteSpan struct {
+	Offset uint32 // Offset in the data file for the DocPageLocations for a page.
+	Size   uint32 // Size of the DocPageLocations in the data file.
+	Check  uint32 // CRC checksum for the DocPageLocations data
 }
 
-type LocationsDoc struct {
-	lState    *LocationsState
-	dataFile  *os.File
-	index     []IndexEntry
-	dataPath  string
-	indexPath string
+// DocPositions tracks the data that is used to index a PDF file.
+type DocPositions struct {
+	lState    *PositionsState // State of whole store.
+	dataFile  *os.File        // Positions are stored in this file.
+	spans     []byteSpan      // Indexes into `dataFile`. These is a byteSpan per page.
+	dataPath  string          // Path of `dataFile`.
+	spansPath string          // Path where `spans` is saved
 }
 
-func (lState *LocationsState) CreateLocationsDoc(docIdx uint64) (*LocationsDoc, error) {
+// ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
+func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32) (
+	serial.DocPageLocations, error) {
+	lDoc, err := lState.OpenPositionsDoc(docIdx)
+	if err != nil {
+		return serial.DocPageLocations{}, err
+	}
+	defer lDoc.Close()
+	return lDoc.ReadDocPagePositions(pageIdx)
+}
+
+func (lState *PositionsState) CreatePositionsDoc(docIdx uint64) (*DocPositions, error) {
 	lDoc := lState.baseFields(docIdx)
 
 	err := lState.createIfNecessary()
@@ -231,44 +249,7 @@ func (lState *LocationsState) CreateLocationsDoc(docIdx uint64) (*LocationsDoc, 
 	return lDoc, nil
 }
 
-// ReadDocPageLocations is inefficient. Document is opened and closed to read a file.
-func (lState *LocationsState) ReadDocPageLocations(docIdx uint64, pageIdx uint32) (
-	serial.DocPageLocations, error) {
-	lDoc, err := lState.OpenLocationsDoc(docIdx)
-	if err != nil {
-		return serial.DocPageLocations{}, err
-	}
-	defer lDoc.Close()
-	return lDoc.ReadDocPageLocations2(pageIdx)
-}
-
-// ReadLocations returns the DocPageLocations for the PDF page given by `doc`, `page`.
-// func (lState *LocationsState) ReadLocations(doc uint64, page uint32) ([]serial.DocPageLocations, error) {
-// 	hash, ok := lState.indexHash[doc]
-// 	if !ok {
-// 		panic("XXXX")
-// 	}
-// 	locationsPath := lState.locationsPath(hash)
-// 	locationsFile, err := os.Open(locationsPath)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "Could not open locations file %q.\n", locationsPath)
-// 		panic(err)
-// 	}
-// 	defer locationsFile.Close()
-
-// 	var dplList []serial.DocPageLocation
-
-// 		// dpl := l.ToDocPageLocations()
-// 		dpl, err := serial.RReadDocPageLocations(locationsFile)
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 		dplList = append(dplList, dpl)
-// 	}
-// 	return dplList, nil
-// }
-
-func (lState *LocationsState) OpenLocationsDoc(docIdx uint64) (*LocationsDoc, error) {
+func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, error) {
 	lDoc := lState.baseFields(docIdx)
 
 	f, err := os.Open(lDoc.dataPath)
@@ -278,49 +259,50 @@ func (lState *LocationsState) OpenLocationsDoc(docIdx uint64) (*LocationsDoc, er
 	}
 	lDoc.dataFile = f
 
-	b, err := ioutil.ReadFile(lDoc.indexPath)
+	b, err := ioutil.ReadFile(lDoc.spansPath)
 	if err != nil {
 		return nil, err
 	}
-	var index []IndexEntry
-	if err := json.Unmarshal(b, &index); err != nil {
+	var spans []byteSpan
+	if err := json.Unmarshal(b, &spans); err != nil {
 		return nil, err
 	}
-	lDoc.index = index
+	lDoc.spans = spans
 
 	return lDoc, nil
 }
 
-func (lState *LocationsState) baseFields(docIdx uint64) *LocationsDoc {
+// baseFields populates a DocPositions with the fields that are the same for Open and Create.
+func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	hash := lState.fileList[docIdx].Hash
-	locPath := lState.locationsPath(hash)
+	locPath := lState.docPath(hash)
 	dataPath := locPath + ".dat"
-	indexPath := locPath + ".idx.json"
-	var err error
-	indexPath, err = filepath.Abs(indexPath)
-	if err != nil {
-		panic(err)
-	}
-	dataPath, err = filepath.Abs(dataPath)
-	if err != nil {
-		panic(err)
-	}
-	return &LocationsDoc{
+	spansPath := locPath + ".idx.json"
+	// var err error
+	// spansPath, err = filepath.Abs(spansPath)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// dataPath, err = filepath.Abs(dataPath)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	return &DocPositions{
 		lState:    lState,
 		dataPath:  dataPath,
-		indexPath: indexPath,
+		spansPath: spansPath,
 	}
 }
 
-func (lDoc *LocationsDoc) Save() error {
-	b, err := json.MarshalIndent(lDoc.index, "", "\t")
+func (lDoc *DocPositions) Save() error {
+	b, err := json.MarshalIndent(lDoc.spans, "", "\t")
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(lDoc.indexPath, b, 0666)
+	return ioutil.WriteFile(lDoc.spansPath, b, 0666)
 }
 
-func (lDoc *LocationsDoc) Close() error {
+func (lDoc *DocPositions) Close() error {
 	err := lDoc.Save()
 	if err != nil {
 		return err
@@ -328,7 +310,7 @@ func (lDoc *LocationsDoc) Close() error {
 	return lDoc.dataFile.Close()
 }
 
-func (lDoc *LocationsDoc) AddPage(dpl serial.DocPageLocations) (uint32, error) {
+func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations) (uint32, error) {
 	b := flatbuffers.NewBuilder(0)
 	buf := serial.MakeDocPageLocations(b, dpl)
 	check := crc32.ChecksumIEEE(buf) // uint32
@@ -337,7 +319,7 @@ func (lDoc *LocationsDoc) AddPage(dpl serial.DocPageLocations) (uint32, error) {
 		return 0, err
 	}
 
-	e := IndexEntry{
+	span := byteSpan{
 		Offset: uint32(offset),
 		Size:   uint32(len(buf)),
 		Check:  check,
@@ -346,12 +328,14 @@ func (lDoc *LocationsDoc) AddPage(dpl serial.DocPageLocations) (uint32, error) {
 	if _, err := lDoc.dataFile.Write(buf); err != nil {
 		return 0, err
 	}
-	lDoc.index = append(lDoc.index, e)
-	return uint32(len(lDoc.index) - 1), nil
+	lDoc.spans = append(lDoc.spans, span)
+	return uint32(len(lDoc.spans) - 1), nil
 }
 
-func (lDoc *LocationsDoc) ReadDocPageLocations2(idx uint32) (serial.DocPageLocations, error) {
-	e := lDoc.index[idx]
+// ReadDocPagePositions returns the DocPageLocations of the text on the `pageIdx` (0-offset)
+// returned text in document `lDoc`.
+func (lDoc *DocPositions) ReadDocPagePositions(pageIdx uint32) (serial.DocPageLocations, error) {
+	e := lDoc.spans[pageIdx]
 	lDoc.dataFile.Seek(io.SeekStart, int(e.Offset))
 	buf := make([]byte, e.Size)
 	if _, err := lDoc.dataFile.Read(buf); err != nil {
@@ -365,9 +349,9 @@ func (lDoc *LocationsDoc) ReadDocPageLocations2(idx uint32) (serial.DocPageLocat
 
 // FileDesc describes a PDF file.
 type FileDesc struct {
-	InPath string // Full path to PDF file.
-	Hash   string // SHA-256 hash of file contents
-	SizeMB float64
+	InPath string  // Full path to PDF file.
+	Hash   string  // SHA-256 hash of file contents.
+	SizeMB float64 // Size of PDF file on disk.
 }
 
 func CreateFileDesc(inPath string) (FileDesc, error) {
@@ -404,19 +388,14 @@ func saveFileList(filename string, fileList []FileDesc) error {
 	return ioutil.WriteFile(filename, b, 0666)
 }
 
-type Loc2Page struct {
-	DocIdx  uint64 // Doc index.
-	PageIdx uint32 // Page index.
-	Text    string // Page text. !@#$ -> Text
+// DocPageText contains doc,page indexes, the PDF page number and the text extracted from from a PDF
+// page.
+type DocPageText struct {
+	DocIdx  uint64 // Doc index (0-offset) into PositionsState.fileList .
+	PageIdx uint32 // Page index (0-offset) into DocPositions.index .
+	PageNum int    // Page number in PDF file (1-offset)
+	Text    string // Extracted page text.
 }
-
-// func (l Loc2Page) ID() string {
-// 	return fmt.Sprintf("%04X.%d", l.Doc, l.Page)
-// }
-
-// func (l Loc2Page) ToPdfPage() PdfPage {
-// 	return PdfPage{ID: l.ID(), Contents: l.Contents}
-// }
 
 // ToSerialTextLocation converts extractor.TextLocation `loc` to a more compact serial.TextLocation.
 func ToSerialTextLocation(loc extractor.TextLocation) serial.TextLocation {

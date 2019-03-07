@@ -23,8 +23,6 @@ var basePath = "store.xxx"
 func main() {
 	flag.StringVar(&basePath, "s", basePath, "Bleve store name. This is a directory.")
 	indexPath := filepath.Join(basePath, "bleve")
-	// locationsPath := filepath.Join(basePath, "locations")
-	// hashPath := filepath.Join(basePath, "file_hash.json")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
@@ -40,16 +38,16 @@ func main() {
 	term := strings.Join(flag.Args(), " ")
 	fmt.Printf("term=%q\n", term)
 
+	lState, err := utils.OpenPositionsState(basePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open positions file %q. err=%v\n", basePath, err)
+		panic(err)
+	}
+
 	// Open existing index.
 	index, err := bleve.Open(indexPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open Bleve index %q.\n", indexPath)
-		panic(err)
-	}
-
-	lState, err := utils.OpenLocationsState(basePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not oopen hash file %q. err=%v\n", basePath, err)
 		panic(err)
 	}
 
@@ -84,13 +82,13 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		dpl, err := lState.ReadDocPageLocations(docIdx, pageIdx)
+		dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
 		if err != nil {
 			panic(err)
 		}
 
-		pdfLocations := dpl.Locations
-		pdfLocations = pdfLocations
+		positions := dpl.Locations
+		positions = positions
 
 		fmt.Printf("%2d: %s Hit=%T Locations=%d %T text=%d %T\n",
 			i, hit, hit,

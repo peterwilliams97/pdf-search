@@ -130,3 +130,10 @@ TODO
 * Make go gettable
 * Add tests
 * Markup PDF files
+*  - Locations -> Positions
+*  - Efficient position encoding
+			Line Y and height
+			Start of word
+*  - ReadDocPageLocations Gather all (doc,page) entries, open the necessary docs and return the pages.
+
+
