@@ -18,7 +18,6 @@ var basePath = "store.simple"
 
 func main() {
 	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
-	indexPath := filepath.Join(basePath, "bleve")
 	var forceCreate, allowAppend bool
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
@@ -35,6 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	indexPath := filepath.Join(basePath, "bleve")
 	fmt.Printf("indexPath=%q\n", indexPath)
 
 	// Read the list of PDF files that will be processed.
@@ -66,6 +66,7 @@ func main() {
 		}
 		fmt.Printf("Indexed %q. Total %d pages indexed.\n", inPath, docCount)
 	}
+	fmt.Printf("indexPath=%q\n", indexPath)
 }
 
 // indexDocPages adds the text of all the pages in PDF file `inPath` to Bleve index `index`.

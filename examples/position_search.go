@@ -22,7 +22,6 @@ var basePath = "store.position"
 
 func main() {
 	flag.StringVar(&basePath, "s", basePath, "Bleve store name. This is a directory.")
-	indexPath := filepath.Join(basePath, "bleve")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
@@ -34,15 +33,17 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+	indexPath := filepath.Join(basePath, "bleve")
 
 	term := strings.Join(flag.Args(), " ")
 	fmt.Printf("term=%q\n", term)
+	fmt.Printf("indexPath=%q\n", indexPath)
 
-	lState, err := utils.OpenPositionsState(basePath, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
-		panic(err)
-	}
+	// lState, err := utils.OpenPositionsState(basePath, false)
+	// if err != nil {
+	// 	fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
+	// 	panic(err)
+	// }
 
 	// Open existing index.
 	index, err := bleve.Open(indexPath)
@@ -72,41 +73,43 @@ func main() {
 		fmt.Println("No matches")
 		os.Exit(0)
 	}
-	for i, hit := range searchResults.Hits {
-		id := hit.Fields["ID"].(string)
-		text := hit.Fields["Text"].(string)
-		locations := hit.Locations
-		contents := locations["Text"]
+	// for _, hit := range searchResults.Hits {
+	// 	// id := hit.Fields["ID"].(string)
+	// 	text := hit.Fields["Text"].(string)
+	// 	locations := hit.Locations
+	// 	contents := locations["Text"]
 
-		docIdx, pageIdx, err := decodeID(id)
-		if err != nil {
-			panic(err)
-		}
-		dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
-		if err != nil {
-			panic(err)
-		}
+	// 	// docIdx, pageIdx, err := decodeID(id)
+	// 	// if err != nil {
+	// 	// 	panic(err)
+	// 	// }
+	// 	// dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
+	// 	// if err != nil {
+	// 	// 	panic(err)
+	// 	// }
 
-		positions := dpl.Locations
-		positions = positions
+	// 	// positions := dpl.Locations
+	// 	// positions = positions
 
-		fmt.Printf("%2d: %s Hit=%T Locations=%d %T text=%d %T\n",
-			i, hit, hit,
-			len(locations), locations,
-			len(text), text)
+	// 	// fmt.Printf("%2d: %s Hit=%T Locations=%d %T text=%d %T\n",
+	// 	// 	i, hit, hit,
+	// 	// 	len(locations), locations,
+	// 	// 	len(text), text)
 
-		k := 0
-		for term, termLocations := range contents {
-			fmt.Printf("%6d: term=%q matches=%d\n", k, term, len(termLocations))
-			k++
-			for j, loc := range termLocations {
-				l := *loc
-				snip := text[l.Start:l.End]
-				fmt.Printf("%9d: %d [%d:%d] %q\n", j, l.Pos, l.Start, l.End, snip)
-			}
-		}
-	}
+	// 	k := 0
+	// 	for term, termLocations := range contents {
+	// 		fmt.Printf("%6d: term=%q matches=%d\n", k, term, len(termLocations))
+	// 		k++
+	// 		for j, loc := range termLocations {
+	// 			l := *loc
+	// 			snip := text[l.Start:l.End]
+	// 			fmt.Printf("%9d: %d [%d:%d] %q\n", j, l.Pos, l.Start, l.End, snip)
+	// 		}
+	// 	}
+	// }
 	fmt.Println("=================@@@=====================")
+	fmt.Printf("term=%q\n", term)
+	fmt.Printf("indexPath=%q\n", indexPath)
 }
 
 // id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)

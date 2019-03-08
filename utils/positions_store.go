@@ -45,8 +45,16 @@ import (
       positions/
           <hash1>.dat
           <hash1>.idx
+          <hash1>.pages
+              <page1>.txt
+              <page2>.txt
+              ...
           <hash2>.dat
           <hash2>.idx
+          <hash2>.pages
+              <page1>.txt
+              <page2>.txt
+              ...
           ...
 */
 
@@ -136,7 +144,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			dpl.Locations = append(dpl.Locations, ToSerialTextLocation(loc))
 		}
 
-		pageIdx, err := lDoc.AddPage(dpl)
+		pageIdx, err := lDoc.AddPage(dpl, text)
 		if err != nil {
 			panic(err)
 			return err
@@ -146,6 +154,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			PageIdx: pageIdx,
 			PageNum: pageNum,
 			Text:    text,
+			// Name:    inPath,
 		})
 		if len(docPages)%100 == 99 {
 			common.Log.Info("\tpageNum=%d docPages=%d %q", pageNum, len(docPages), inPath)
@@ -260,7 +269,8 @@ type DocPositions struct {
 	dataFile  *os.File   // Positions are stored in this file.
 	spans     []byteSpan // Indexes into `dataFile`. These is a byteSpan per page.
 	dataPath  string     // Path of `dataFile`.
-	spansPath string     // Path where `spans` is saved
+	spansPath string     // Path where `spans` is saved.
+	// textDir   string
 }
 
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
@@ -302,7 +312,8 @@ func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, er
 		panic(err)
 		return nil, err
 	}
-	return lDoc, nil
+	// err = MkDir(lDoc.textDir)
+	return lDoc, err
 }
 
 func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, error) {
@@ -334,6 +345,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	locPath := lState.docPath(hash)
 	dataPath := locPath + ".dat"
 	spansPath := locPath + ".idx.json"
+	// textDir := locPath + ".pages"
 	// var err error
 	// spansPath, err = filepath.Abs(spansPath)
 	// if err != nil {
@@ -348,6 +360,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 		docIdx:    docIdx,
 		dataPath:  dataPath,
 		spansPath: spansPath,
+		// textDir:   textDir,
 	}
 	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp
@@ -369,7 +382,8 @@ func (lDoc *DocPositions) Close() error {
 	return lDoc.dataFile.Close()
 }
 
-func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations) (uint32, error) {
+// !@#$ Remove `text` param.
+func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations, text string) (uint32, error) {
 	b := flatbuffers.NewBuilder(0)
 	buf := serial.MakeDocPageLocations(b, dpl)
 	check := crc32.ChecksumIEEE(buf) // uint32
@@ -387,8 +401,19 @@ func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations) (uint32, error) {
 	if _, err := lDoc.dataFile.Write(buf); err != nil {
 		return 0, err
 	}
+
 	lDoc.spans = append(lDoc.spans, span)
-	return uint32(len(lDoc.spans) - 1), nil
+	pageIdx := uint32(len(lDoc.spans) - 1)
+
+	// pref := text
+	// if len(pref) > 40 {
+	// 	pref = pref[:40]
+	// }
+	// fmt.Printf("text=%d %q\n", len(text), pref)
+
+	// filename := filepath.Join(lDoc.textDir, fmt.Sprintf("%03d.txt", pageIdx))
+	// err = ioutil.WriteFile(filename, []byte(text), 0644)
+	return pageIdx, err
 }
 
 // ReadDocPagePositions returns the DocPageLocations of the text on the `pageIdx` (0-offset)
@@ -447,6 +472,13 @@ func saveFileList(filename string, fileList []FileDesc) error {
 	return ioutil.WriteFile(filename, b, 0666)
 }
 
+// type PdfPage struct {
+// 	ID       string // Unique identifier. <file hash>.<page number>
+// 	Name     string // File name.
+// 	Page     int    // Page number.
+// 	Contents string // Page text.
+// }
+
 // DocPageText contains doc,page indexes, the PDF page number and the text extracted from from a PDF
 // page.
 type DocPageText struct {
@@ -454,6 +486,7 @@ type DocPageText struct {
 	PageIdx uint32 // Page index (0-offset) into DocPositions.index .
 	PageNum int    // Page number in PDF file (1-offset)
 	Text    string // Extracted page text.
+	// Name    string // File name. !@#$
 }
 
 // ToSerialTextLocation converts extractor.TextLocation `loc` to a more compact serial.TextLocation.

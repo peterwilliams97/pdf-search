@@ -15,13 +15,12 @@ import (
 const usage = `Usage: go run location_index.go [OPTIONS] PDF32000_2008.pdf
 Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`
 
-var basePath = "store.simple"
+var basePath = "store.position"
 var minFileNum = -1
 var maxFileNum = -1
 
 func main() {
 	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
-	indexPath := filepath.Join(basePath, "bleve")
 	var forceCreate, allowAppend bool
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
@@ -38,7 +37,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	indexPath := filepath.Join(basePath, "bleve")
 	fmt.Printf("indexPath=%q\n", indexPath)
+
 	// Read the list of PDF files that will be processed.
 	pathList, err := utils.PatternsToPaths(flag.Args(), true)
 	if err != nil {
@@ -83,7 +84,7 @@ func main() {
 		}
 		fmt.Printf("Indexed %q. Total %d pages indexed.\n", inPath, docCount)
 	}
-
+	fmt.Printf("indexPath=%q\n", indexPath)
 }
 
 type IDText struct {
@@ -112,6 +113,7 @@ func indexDocPagesLoc(index bleve.Index, lState *utils.PositionsState, inPath st
 		// Don't weigh down the Bleve index with the text bounding boxes.
 		id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
 		idText := IDText{ID: id, Text: l.Text}
+
 		err = index.Index(id, idText)
 		dt := time.Since(t0)
 		if err != nil {
