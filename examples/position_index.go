@@ -119,7 +119,7 @@ func indexDocPagesLoc(index bleve.Index, lState *utils.PositionsState, inPath st
 		if err != nil {
 			return err
 		}
-		if i%10 == 0 {
+		if i%100 == 0 {
 			fmt.Printf("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)\n",
 				i+1, len(docPages), dt.Seconds(), dt.Seconds()/float64(i+1))
 			fmt.Printf("\tid=%q text=%d\n", id, len(idText.Text))

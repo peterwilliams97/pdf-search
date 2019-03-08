@@ -159,6 +159,10 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		if len(docPages)%100 == 99 {
 			common.Log.Info("\tpageNum=%d docPages=%d %q", pageNum, len(docPages), inPath)
 		}
+		dp := docPages[len(docPages)-1]
+		common.Log.Info("ExtractDocPagePositions: Doc=%d Page=%d locs=%d",
+			dp.DocIdx, dp.PageIdx, len(dpl.Locations))
+
 		return nil
 	})
 	if err != nil {
@@ -270,7 +274,7 @@ type DocPositions struct {
 	spans     []byteSpan // Indexes into `dataFile`. These is a byteSpan per page.
 	dataPath  string     // Path of `dataFile`.
 	spansPath string     // Path where `spans` is saved.
-	// textDir   string
+	textDir   string
 }
 
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
@@ -281,7 +285,7 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 		return serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
-	return lDoc.ReadDocPagePositions(pageIdx)
+	return lDoc.ReadPagePositions(pageIdx)
 }
 
 // CreatePositionsDoc opens lDoc.dataPath for writing.
@@ -312,7 +316,7 @@ func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, er
 		panic(err)
 		return nil, err
 	}
-	// err = MkDir(lDoc.textDir)
+	err = MkDir(lDoc.textDir)
 	return lDoc, err
 }
 
@@ -345,7 +349,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	locPath := lState.docPath(hash)
 	dataPath := locPath + ".dat"
 	spansPath := locPath + ".idx.json"
-	// textDir := locPath + ".pages"
+	textDir := locPath + ".pages"
 	// var err error
 	// spansPath, err = filepath.Abs(spansPath)
 	// if err != nil {
@@ -360,7 +364,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 		docIdx:    docIdx,
 		dataPath:  dataPath,
 		spansPath: spansPath,
-		// textDir:   textDir,
+		textDir:   textDir,
 	}
 	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp
@@ -411,21 +415,30 @@ func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations, text string) (uin
 	// }
 	// fmt.Printf("text=%d %q\n", len(text), pref)
 
-	// filename := filepath.Join(lDoc.textDir, fmt.Sprintf("%03d.txt", pageIdx))
-	// err = ioutil.WriteFile(filename, []byte(text), 0644)
+	filename := filepath.Join(lDoc.textDir, fmt.Sprintf("%03d.txt", pageIdx))
+	err = ioutil.WriteFile(filename, []byte(text), 0644)
 	return pageIdx, err
 }
 
-// ReadDocPagePositions returns the DocPageLocations of the text on the `pageIdx` (0-offset)
+// ReadPagePositions returns the DocPageLocations of the text on the `pageIdx` (0-offset)
 // returned text in document `lDoc`.
-func (lDoc *DocPositions) ReadDocPagePositions(pageIdx uint32) (serial.DocPageLocations, error) {
+func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (serial.DocPageLocations, error) {
 	e := lDoc.spans[pageIdx]
-	lDoc.dataFile.Seek(io.SeekStart, int(e.Offset))
+	offset, err := lDoc.dataFile.Seek(int64(e.Offset), io.SeekStart)
+	if err != nil || uint32(offset) != e.Offset {
+		common.Log.Error("ReadPagePositions: Seek failed e=%+v offset=%d err=%v",
+			e, offset, err)
+		panic("wtf")
+	}
 	buf := make([]byte, e.Size)
 	if _, err := lDoc.dataFile.Read(buf); err != nil {
 		return serial.DocPageLocations{}, err
 	}
-	if crc32.ChecksumIEEE(buf) != e.Check {
+	size := len(buf)
+	check := crc32.ChecksumIEEE(buf)
+	if check != e.Check {
+		common.Log.Error("ReadPagePositions: e=%+v size=%d check=%d", e, size, check)
+		panic(errors.New("bad checksum"))
 		return serial.DocPageLocations{}, errors.New("bad checksum")
 	}
 	return serial.ReadDocPageLocations(buf)

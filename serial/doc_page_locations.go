@@ -8,6 +8,7 @@ import (
 
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/peterwilliams97/pdf-search/serial/locations"
+	"github.com/unidoc/unidoc/common"
 )
 
 func WriteDocPageLocations(f *os.File, dpl DocPageLocations) error {
@@ -39,6 +40,7 @@ func RReadDocPageLocations(f *os.File) (DocPageLocations, error) {
 		return DocPageLocations{}, err
 	}
 	if crc32.ChecksumIEEE(buf) != check {
+		panic(errors.New("bad checksum"))
 		return DocPageLocations{}, errors.New("bad checksum")
 	}
 	return ReadDocPageLocations(buf)
@@ -155,6 +157,8 @@ func ReadDocPageLocations(buf []byte) (DocPageLocations, error) {
 		}
 		locs = append(locs, getTextLocation(&loc))
 	}
+
+	common.Log.Info("ReadDocPageLocations: Doc=%d Page=%d locs=%d", dpl.Doc(), dpl.Page(), len(locs))
 
 	return DocPageLocations{
 		dpl.Doc(),

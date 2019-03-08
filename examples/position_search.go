@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/registry"
+	"github.com/peterwilliams97/pdf-search/serial"
 	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/unidoc/unidoc/common"
 )
 
 const usage = `Usage: go run location_search.go [OPTIONS] Adobe PDF
@@ -39,11 +42,11 @@ func main() {
 	fmt.Printf("term=%q\n", term)
 	fmt.Printf("indexPath=%q\n", indexPath)
 
-	// lState, err := utils.OpenPositionsState(basePath, false)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
-	// 	panic(err)
-	// }
+	lState, err := utils.OpenPositionsState(basePath, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
+		panic(err)
+	}
 
 	// Open existing index.
 	index, err := bleve.Open(indexPath)
@@ -73,43 +76,62 @@ func main() {
 		fmt.Println("No matches")
 		os.Exit(0)
 	}
-	// for _, hit := range searchResults.Hits {
-	// 	// id := hit.Fields["ID"].(string)
-	// 	text := hit.Fields["Text"].(string)
-	// 	locations := hit.Locations
-	// 	contents := locations["Text"]
+	for i, hit := range searchResults.Hits {
+		// if i > 10 {
+		// 	break
+		// }
+		id := hit.ID
+		text := hit.Fields["Text"].(string)
+		locations := hit.Locations
+		contents := locations["Text"]
 
-	// 	// docIdx, pageIdx, err := decodeID(id)
-	// 	// if err != nil {
-	// 	// 	panic(err)
-	// 	// }
-	// 	// dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
-	// 	// if err != nil {
-	// 	// 	panic(err)
-	// 	// }
+		docIdx, pageIdx, err := decodeID(id)
+		if err != nil {
+			panic(err)
+		}
+		dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
+		if err != nil {
+			panic(err)
+		}
 
-	// 	// positions := dpl.Locations
-	// 	// positions = positions
+		positions := dpl.Locations
 
-	// 	// fmt.Printf("%2d: %s Hit=%T Locations=%d %T text=%d %T\n",
-	// 	// 	i, hit, hit,
-	// 	// 	len(locations), locations,
-	// 	// 	len(text), text)
+		fmt.Printf("%2d: %q %s Hit=%T Locations=%d %T text=%d %T positions=%d %T %#v\n",
+			i, id,
+			hit, hit,
+			len(locations), locations,
+			len(text), text,
+			len(positions), positions, positions[0])
 
-	// 	k := 0
-	// 	for term, termLocations := range contents {
-	// 		fmt.Printf("%6d: term=%q matches=%d\n", k, term, len(termLocations))
-	// 		k++
-	// 		for j, loc := range termLocations {
-	// 			l := *loc
-	// 			snip := text[l.Start:l.End]
-	// 			fmt.Printf("%9d: %d [%d:%d] %q\n", j, l.Pos, l.Start, l.End, snip)
-	// 		}
-	// 	}
-	// }
+		// for j, pos := range positions {
+		// 	fmt.Printf("%6d: %v\n", j, pos)
+		// }
+
+		k := 0
+		for term, termLocations := range contents {
+			fmt.Printf("%6d: term=%q matches=%d\n", k, term, len(termLocations))
+			k++
+			for j, loc := range termLocations {
+				l := *loc
+				snip := text[l.Start:l.End]
+				pos := getPosition(positions, uint32(l.Start))
+				fmt.Printf("%9d: %d [%d:%d] %q %v\n", j, l.Pos, l.Start, l.End, snip, pos)
+			}
+		}
+	}
 	fmt.Println("=================@@@=====================")
 	fmt.Printf("term=%q\n", term)
 	fmt.Printf("indexPath=%q\n", indexPath)
+}
+
+func getPosition(positions []serial.TextLocation, offset uint32) serial.TextLocation {
+	i := sort.Search(len(positions), func(i int) bool { return positions[i].Offset >= offset })
+	if !(0 <= i && i < len(positions)) {
+		common.Log.Error("getPosition: offset=%d i=%d len=%d %v==%v", offset, i, len(positions),
+			positions[0], positions[len(positions)-1])
+		return serial.TextLocation{}
+	}
+	return positions[i]
 }
 
 // id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
@@ -122,9 +144,10 @@ func decodeID(id string) (uint64, uint32, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	pageIdx, err := strconv.ParseUint(parts[0], 10, 32)
+	pageIdx, err := strconv.ParseUint(parts[1], 10, 32)
 	if err != nil {
 		return 0, 0, err
 	}
+	fmt.Printf("$$$ %+q -> %+q %d.%d\n", id, parts, docIdx, pageIdx)
 	return uint64(docIdx), uint32(pageIdx), nil
 }
