@@ -144,7 +144,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			dpl.Locations = append(dpl.Locations, ToSerialTextLocation(loc))
 		}
 
-		pageIdx, err := lDoc.AddPage(dpl, text)
+		pageIdx, err := lDoc.AddPage(pageNum, dpl, text)
 		if err != nil {
 			panic(err)
 			return err
@@ -261,9 +261,10 @@ func (lState *PositionsState) createIfNecessary() error {
 // The span is over [Offset, Offset+Size).
 // There is one byteSpan (corresponding to a DocPageLocations) per page.
 type byteSpan struct {
-	Offset uint32 // Offset in the data file for the DocPageLocations for a page.
-	Size   uint32 // Size of the DocPageLocations in the data file.
-	Check  uint32 // CRC checksum for the DocPageLocations data
+	Offset  uint32 // Offset in the data file for the DocPageLocations for a page.
+	Size    uint32 // Size of the DocPageLocations in the data file.
+	Check   uint32 // CRC checksum for the DocPageLocations data.
+	PageNum uint32 // PDF page number.
 }
 
 // DocPositions tracks the data that is used to index a PDF file.
@@ -279,10 +280,10 @@ type DocPositions struct {
 
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
 func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32) (
-	serial.DocPageLocations, error) {
+	uint32, serial.DocPageLocations, error) {
 	lDoc, err := lState.OpenPositionsDoc(docIdx)
 	if err != nil {
-		return serial.DocPageLocations{}, err
+		return 0, serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
 	return lDoc.ReadPagePositions(pageIdx)
@@ -387,7 +388,7 @@ func (lDoc *DocPositions) Close() error {
 }
 
 // !@#$ Remove `text` param.
-func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations, text string) (uint32, error) {
+func (lDoc *DocPositions) AddPage(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
 	b := flatbuffers.NewBuilder(0)
 	buf := serial.MakeDocPageLocations(b, dpl)
 	check := crc32.ChecksumIEEE(buf) // uint32
@@ -397,9 +398,10 @@ func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations, text string) (uin
 	}
 
 	span := byteSpan{
-		Offset: uint32(offset),
-		Size:   uint32(len(buf)),
-		Check:  check,
+		Offset:  uint32(offset),
+		Size:    uint32(len(buf)),
+		Check:   check,
+		PageNum: uint32(pageNum),
 	}
 
 	if _, err := lDoc.dataFile.Write(buf); err != nil {
@@ -422,7 +424,7 @@ func (lDoc *DocPositions) AddPage(dpl serial.DocPageLocations, text string) (uin
 
 // ReadPagePositions returns the DocPageLocations of the text on the `pageIdx` (0-offset)
 // returned text in document `lDoc`.
-func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (serial.DocPageLocations, error) {
+func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (uint32, serial.DocPageLocations, error) {
 	e := lDoc.spans[pageIdx]
 	offset, err := lDoc.dataFile.Seek(int64(e.Offset), io.SeekStart)
 	if err != nil || uint32(offset) != e.Offset {
@@ -432,16 +434,17 @@ func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (serial.DocPageLocat
 	}
 	buf := make([]byte, e.Size)
 	if _, err := lDoc.dataFile.Read(buf); err != nil {
-		return serial.DocPageLocations{}, err
+		return 0, serial.DocPageLocations{}, err
 	}
 	size := len(buf)
 	check := crc32.ChecksumIEEE(buf)
 	if check != e.Check {
 		common.Log.Error("ReadPagePositions: e=%+v size=%d check=%d", e, size, check)
 		panic(errors.New("bad checksum"))
-		return serial.DocPageLocations{}, errors.New("bad checksum")
+		return 0, serial.DocPageLocations{}, errors.New("bad checksum")
 	}
-	return serial.ReadDocPageLocations(buf)
+	dpl, err := serial.ReadDocPageLocations(buf)
+	return e.PageNum, dpl, err
 }
 
 // FileDesc describes a PDF file.

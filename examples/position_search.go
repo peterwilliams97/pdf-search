@@ -89,19 +89,16 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
+		pageNum, dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
 		if err != nil {
 			panic(err)
 		}
 
 		positions := dpl.Locations
 
-		fmt.Printf("%2d: %q %s Hit=%T Locations=%d %T text=%d %T positions=%d %T %#v\n",
-			i, id,
-			hit, hit,
-			len(locations), locations,
-			len(text), text,
-			len(positions), positions, positions[0])
+		fmt.Printf("%2d: pageNum=%d id=%q hit=%s Locations=%d text=%d  positions=%d\n",
+			i, pageNum, id, hit,
+			len(locations), len(text), len(positions))
 
 		// for j, pos := range positions {
 		// 	fmt.Printf("%6d: %v\n", j, pos)
