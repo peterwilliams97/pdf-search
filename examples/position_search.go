@@ -76,6 +76,8 @@ func main() {
 		fmt.Println("No matches")
 		os.Exit(0)
 	}
+
+	extractions := utils.CreateExtractList(10)
 	for i, hit := range searchResults.Hits {
 		// if i > 10 {
 		// 	break
@@ -89,14 +91,14 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		pageNum, dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
+		inPath, pageNum, dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
 		if err != nil {
 			panic(err)
 		}
 
 		positions := dpl.Locations
 
-		fmt.Printf("%2d: pageNum=%d id=%q hit=%s Locations=%d text=%d  positions=%d\n",
+		fmt.Printf("--->>> %2d: pageNum=%d id=%q hit=%s Locations=%d text=%d  positions=%d\n",
 			i, pageNum, id, hit,
 			len(locations), len(text), len(positions))
 
@@ -113,8 +115,13 @@ func main() {
 				snip := text[l.Start:l.End]
 				pos := getPosition(positions, uint32(l.Start))
 				fmt.Printf("%9d: %d [%d:%d] %q %v\n", j, l.Pos, l.Start, l.End, snip, pos)
+				extractions.AddRect(inPath, int(pageNum),
+					float64(pos.Llx), float64(pos.Lly), float64(pos.Urx), float64(pos.Ury))
 			}
 		}
+	}
+	if err := extractions.SaveOutputPdf("XXXXX.pdf"); err != nil {
+		panic(err)
 	}
 	fmt.Println("=================@@@=====================")
 	fmt.Printf("term=%q\n", term)

@@ -151,7 +151,7 @@ func ProcessPDFPages(inPath string, processPage func(pageNum int, page *pdf.PdfP
 func processPDFPages(inPath string, processPage func(pageNum int, page *pdf.PdfPage) error) error {
 	pdfReader, err := PdfOpen(inPath)
 	if err != nil {
-		common.Log.Error("ProcessPDFPages: Could not open inPath=%q. err=%v", inPath, err)
+		common.Log.Error("processPDFPages: Could not open inPath=%q. err=%v", inPath, err)
 		return err
 	}
 	numPages, err := pdfReader.GetNumPages()

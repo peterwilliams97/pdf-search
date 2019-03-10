@@ -70,6 +70,15 @@ type PositionsState struct {
 	updateTime time.Time         // Time of last Flush()
 }
 
+func (lState PositionsState) indexToPath(idx uint64) (string, bool) {
+	hash, ok := lState.indexHash[idx]
+	if !ok {
+		return "", false
+	}
+	inPath, ok := lState.hashPath[hash]
+	return inPath, ok
+}
+
 func (lState PositionsState) positionsDir() string {
 	return filepath.Join(lState.root, "positions")
 }
@@ -148,6 +157,9 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		if err != nil {
 			panic(err)
 			return err
+		}
+		if pageNum == 0 {
+			panic("qqqq")
 		}
 		docPages = append(docPages, DocPageText{
 			DocIdx:  lDoc.docIdx,
@@ -269,6 +281,7 @@ type byteSpan struct {
 
 // DocPositions tracks the data that is used to index a PDF file.
 type DocPositions struct {
+	inPath    string
 	lState    *PositionsState // State of whole store.
 	docIdx    uint64
 	dataFile  *os.File   // Positions are stored in this file.
@@ -280,13 +293,15 @@ type DocPositions struct {
 
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
 func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32) (
-	uint32, serial.DocPageLocations, error) {
+	string, uint32, serial.DocPageLocations, error) {
 	lDoc, err := lState.OpenPositionsDoc(docIdx)
 	if err != nil {
-		return 0, serial.DocPageLocations{}, err
+		return "", 0, serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
-	return lDoc.ReadPagePositions(pageIdx)
+	common.Log.Info("lDoc=%#v", lDoc)
+	pageNum, dpl, err := lDoc.ReadPagePositions(pageIdx)
+	return lDoc.inPath, pageNum, dpl, err
 }
 
 // CreatePositionsDoc opens lDoc.dataPath for writing.
@@ -346,6 +361,7 @@ func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, er
 
 // baseFields populates a DocPositions with the fields that are the same for Open and Create.
 func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
+	inPath := lState.fileList[docIdx].InPath
 	hash := lState.fileList[docIdx].Hash
 	locPath := lState.docPath(hash)
 	dataPath := locPath + ".dat"
@@ -361,6 +377,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	// 	panic(err)
 	// }
 	dp := DocPositions{
+		inPath:    inPath,
 		lState:    lState,
 		docIdx:    docIdx,
 		dataPath:  dataPath,
@@ -389,6 +406,9 @@ func (lDoc *DocPositions) Close() error {
 
 // !@#$ Remove `text` param.
 func (lDoc *DocPositions) AddPage(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
+	if pageNum == 0 {
+		panic("0000")
+	}
 	b := flatbuffers.NewBuilder(0)
 	buf := serial.MakeDocPageLocations(b, dpl)
 	check := crc32.ChecksumIEEE(buf) // uint32
@@ -426,6 +446,9 @@ func (lDoc *DocPositions) AddPage(pageNum int, dpl serial.DocPageLocations, text
 // returned text in document `lDoc`.
 func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (uint32, serial.DocPageLocations, error) {
 	e := lDoc.spans[pageIdx]
+	if e.PageNum == 0 {
+		panic("jjjjj")
+	}
 	offset, err := lDoc.dataFile.Seek(int64(e.Offset), io.SeekStart)
 	if err != nil || uint32(offset) != e.Offset {
 		common.Log.Error("ReadPagePositions: Seek failed e=%+v offset=%d err=%v",
