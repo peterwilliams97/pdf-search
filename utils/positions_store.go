@@ -291,6 +291,14 @@ type DocPositions struct {
 	textDir   string
 }
 
+func (d DocPositions) String() string {
+	parts := []string{fmt.Sprintf("%q docIdx=%d", filepath.Base(d.inPath), d.docIdx)}
+	for i, span := range d.spans {
+		parts = append(parts, fmt.Sprintf("\t%2d: %v", i+1, span))
+	}
+	return fmt.Sprintf("DocPositions{%s}", strings.Join(parts, "\n"))
+}
+
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
 func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32) (
 	string, uint32, serial.DocPageLocations, error) {
@@ -299,7 +307,7 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 		return "", 0, serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
-	common.Log.Info("lDoc=%#v", lDoc)
+	common.Log.Debug("lDoc=%s", lDoc)
 	pageNum, dpl, err := lDoc.ReadPagePositions(pageIdx)
 	return lDoc.inPath, pageNum, dpl, err
 }
@@ -364,25 +372,14 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	inPath := lState.fileList[docIdx].InPath
 	hash := lState.fileList[docIdx].Hash
 	locPath := lState.docPath(hash)
-	dataPath := locPath + ".dat"
-	spansPath := locPath + ".idx.json"
-	textDir := locPath + ".pages"
-	// var err error
-	// spansPath, err = filepath.Abs(spansPath)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// dataPath, err = filepath.Abs(dataPath)
-	// if err != nil {
-	// 	panic(err)
-	// }
+
 	dp := DocPositions{
-		inPath:    inPath,
 		lState:    lState,
+		inPath:    inPath,
 		docIdx:    docIdx,
-		dataPath:  dataPath,
-		spansPath: spansPath,
-		textDir:   textDir,
+		dataPath:  locPath + ".dat",
+		spansPath: locPath + ".idx.json",
+		textDir:   locPath + ".pages",
 	}
 	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp
@@ -531,6 +528,10 @@ type DocPageText struct {
 // ToSerialTextLocation converts extractor.TextLocation `loc` to a more compact serial.TextLocation.
 func ToSerialTextLocation(loc extractor.TextLocation) serial.TextLocation {
 	b := loc.BBox
+	// bbox := b
+	// if math.Abs(bbox.Urx-bbox.Llx) < 1.0 || math.Abs(bbox.Ury-bbox.Lly) < 1.0 {
+	// 	panic(fmt.Errorf("bbox=%+v", bbox))
+	// }
 	return serial.TextLocation{
 		Offset: uint32(loc.Offset),
 		Llx:    float32(b.Llx),

@@ -2,7 +2,9 @@ package utils
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
+	"strings"
 
 	"github.com/unidoc/unidoc/common"
 	"github.com/unidoc/unidoc/pdf/creator"
@@ -16,6 +18,14 @@ type ExtractList struct {
 	sourceSet map[string]bool
 	contents  map[string]map[int]pageContent // Pages for each document
 	// documentIndex map[string]int
+}
+
+func (l ExtractList) String() string {
+	parts := []string{fmt.Sprintf("maxPages: %d", l.maxPages)}
+	for i, src := range l.sources {
+		parts = append(parts, fmt.Sprintf("%6d: %20q:%d", i, filepath.Base(src.inPath), src.pageNum))
+	}
+	return strings.Join(parts, "\n")
 }
 
 type Extract struct {
@@ -88,7 +98,7 @@ func (l *ExtractList) NumPages() int {
 // }
 
 func (l *ExtractList) SaveOutputPdf(outPath string) error {
-	common.Log.Info("l=%#v", *l)
+	common.Log.Info("l=%s", *l)
 	for inPath, docContents := range l.contents {
 		pdfReader, err := PdfOpen(inPath)
 		if err != nil {
@@ -133,12 +143,16 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 			return err
 		}
 		// h := pageContent.page.MediaBox.Ury
-		for _, r := range pageContent.rects {
-			common.Log.Info("@@@@ %q:%d %+v", filepath.Base(src.inPath), src.pageNum, r)
+		for _, r := range pageContent.rects[:1] {
+			common.Log.Info("@@@@ %q:%d %s", filepath.Base(src.inPath), src.pageNum, rectString(r))
 			// rect := c.NewRectangle(r.Llx, h-r.Lly, r.Urx-r.Llx, -(r.Ury - r.Lly))
 			rect := c.NewRectangle(r.Llx, r.Lly, r.Urx-r.Llx, r.Ury-r.Lly)
-			rect.SetBorderColor(creator.ColorRGBFromHex("#ff0000")) // Red border
-			rect.SetBorderWidth(15.0)
+			bbox := r
+			if math.Abs(bbox.Urx-bbox.Llx) < 1.0 || math.Abs(bbox.Ury-bbox.Lly) < 1.0 {
+				panic(fmt.Errorf("bbox=%+v", bbox))
+			}
+			rect.SetBorderColor(creator.ColorRGBFromHex("#0000ff")) // Red border
+			rect.SetBorderWidth(1.0)
 			if err := c.Draw(rect); err != nil {
 				panic(err)
 				return err
@@ -151,6 +165,11 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 		panic(err)
 	}
 	return err
+}
+
+func rectString(r pdf.PdfRectangle) string {
+	return fmt.Sprintf("{llx: %4.1f lly: %4.1f urx: %4.1f ury: %4.1f} %.1f x %.1f",
+		r.Llx, r.Lly, r.Urx, r.Ury, r.Urx-r.Llx, r.Ury-r.Lly)
 }
 
 // func DrawPdfRectangle(inPath, outPath string, pageNumber int, llx, lly, urx, ury float64) error {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/registry"
+	"github.com/blevesearch/bleve/search/highlight"
 	"github.com/peterwilliams97/pdf-search/serial"
 	"github.com/peterwilliams97/pdf-search/utils"
 	"github.com/unidoc/unidoc/common"
@@ -63,6 +64,7 @@ func main() {
 	search.Highlight = bleve.NewHighlight()
 	search.Fields = []string{"Text"}
 	search.Highlight.Fields = search.Fields
+	search.Explain = true
 
 	searchResults, err := index.Search(search)
 	if err != nil {
@@ -71,21 +73,77 @@ func main() {
 
 	fmt.Println("=================!!!=====================")
 	fmt.Printf("searchResults=%s\n", searchResults)
+	// fmt.Println("=================---=====================")
+	// fmt.Printf("searchResults.Fields=%s\n", searchResults.Fields)
 	fmt.Println("=================***=====================")
 	if len(searchResults.Hits) == 0 {
 		fmt.Println("No matches")
 		os.Exit(0)
 	}
 
+	// ~~~~
+	var highlighter highlight.Highlighter
+
+	if search.Highlight != nil {
+		// Get the right highlighter. Config.DefaultHighlighter
+		highlighter, err = bleve.Config.Cache.HighlighterNamed(bleve.Config.DefaultHighlighter)
+		if err != nil {
+			panic(err)
+		}
+		if search.Highlight.Style != nil {
+			highlighter, err = bleve.Config.Cache.HighlighterNamed(*search.Highlight.Style)
+			if err != nil {
+				panic(err)
+			}
+		}
+		if highlighter == nil {
+			panic(fmt.Errorf("no highlighter named `%s` registered", *search.Highlight.Style))
+		}
+	}
+	// !!!!
+
 	extractions := utils.CreateExtractList(10)
 	for i, hit := range searchResults.Hits {
-		// if i > 10 {
-		// 	break
-		// }
+		if i >= 2 {
+			break
+		}
 		id := hit.ID
 		text := hit.Fields["Text"].(string)
 		locations := hit.Locations
 		contents := locations["Text"]
+		expl := hit.Expl
+
+		doc, err := index.Document(id)
+		if err != nil {
+			panic(err)
+		}
+
+		termLocations, bestFragments, formattedFragments := highlighter.BestFragmentsInField2(hit, doc, "Text", 5)
+		lens := make([]int, len(formattedFragments))
+		for i, f := range formattedFragments {
+			lens[i] = len(f)
+		}
+		fmt.Printf("##1 formattedFragments=%d %+v<<<<\n", len(formattedFragments), lens)
+		fmt.Printf("##2 bestFragments=%d %T<<<<\n", len(bestFragments), bestFragments)
+		for k, f := range bestFragments {
+			fmt.Printf("\t%2d: %s\n\t%+q\n", k, *f, f.Snip(text))
+		}
+		fmt.Printf("##3 termLocations=%d %T<<<<\n", len(termLocations), termLocations)
+		for k, f := range termLocations {
+			fmt.Printf("\t%2d: %+v %+q\n", k, *f, f.Snip(text))
+		}
+
+		fmt.Printf("===>>> %2d: id=%q hit=%T=%s %d fragments\n", i, id, hit, hit, len(hit.Fragments))
+		j := 0
+		for fragmentField, fragments := range hit.Fragments {
+			fmt.Printf("\t%2d: fragmentField=%q %d parts\n", j, fragmentField, len(fragments))
+			for k, fragment := range fragments {
+				fmt.Printf("\t\t%2d: %d %+q\n", k, len(fragment), fragment)
+			}
+			j++
+		}
+		fmt.Printf("==@>>> expl=%s\n", expl)
+		fmt.Println("--------------------------------------------")
 
 		docIdx, pageIdx, err := decodeID(id)
 		if err != nil {
@@ -108,13 +166,13 @@ func main() {
 
 		k := 0
 		for term, termLocations := range contents {
-			fmt.Printf("%6d: term=%q matches=%d\n", k, term, len(termLocations))
+			fmt.Printf("--=+>> %6d: term=%q matches=%d\n", k, term, len(termLocations))
 			k++
 			for j, loc := range termLocations {
 				l := *loc
 				snip := text[l.Start:l.End]
 				pos := getPosition(positions, uint32(l.Start))
-				fmt.Printf("%9d: %d [%d:%d] %q %v\n", j, l.Pos, l.Start, l.End, snip, pos)
+				fmt.Printf("** %9d: %d [%d:%d] %q %v\n", j, l.Pos, l.Start, l.End, snip, pos)
 				extractions.AddRect(inPath, int(pageNum),
 					float64(pos.Llx), float64(pos.Lly), float64(pos.Urx), float64(pos.Ury))
 			}

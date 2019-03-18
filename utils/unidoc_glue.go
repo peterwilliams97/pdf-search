@@ -107,14 +107,14 @@ func ExtractPageText(page *pdf.PdfPage) (string, error) {
 	return textList.ToText(), nil
 }
 
-// ExtractPageTextLocation returns the text on page `page`.
+// ExtractPageTextLocation returns the locations of text on page `page`.
 func ExtractPageTextLocation(page *pdf.PdfPage) (string, []extractor.TextLocation, error) {
 	textList, err := ExtractPageTextObject(page)
 	if err != nil {
 		return "", nil, err
 	}
-	text, location := textList.ToTextLocation()
-	return text, location, nil
+	text, locations := textList.ToTextLocation()
+	return text, locations, nil
 }
 
 // ExtractPageTextObject returns the PageText on page `page`.

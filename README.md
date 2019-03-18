@@ -8,9 +8,10 @@ The simple programs are to explore the UniDoc and Bleve libraries.
 Installation (UniDoc)
 ---------------------
 	cd $GOPATH/src/github.com
-	mkdir -p github.com/peterwilliams97
-	cd github.com/peterwilliams97
+	mkdir -p github.com/unidoc
+	cd github.com/unidoc
 	git clone https://github.com/peterwilliams97/unidoc
+	cd unidoc
 	git checkout v3.imagemark
 
 Installation (Bleve)
