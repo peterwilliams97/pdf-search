@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,8 +63,8 @@ const storeUpdatePeriodSec = 60.0
 
 // PositionsState is the global state of a writer or reader to the position indexes saved to disk.
 type PositionsState struct {
-	root       string            // top level directory of the data saved to disk
-	fileList   []FileDesc        // list of file entries
+	root       string            // Top level directory of the data saved to disk
+	fileList   []FileDesc        // List of file entries
 	hashIndex  map[string]uint64 // {file hash: index into fileList}
 	indexHash  map[uint64]string // {index into fileList: file hash}
 	hashPath   map[string]string // {file hash: file path}
@@ -138,19 +139,19 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 	err = ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, locations, err := ExtractPageTextLocation(page)
 		if err != nil {
-			common.Log.Error("ExtractDocPagePositions: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",
-				inPath, pageNum, err)
+			common.Log.Error("ExtractDocPagePositions: ExtractPageTextLocation failed. "+
+				"inPath=%q pageNum=%d err=%v", inPath, pageNum, err)
 			return nil // !@#$ Skip errors for now
-			panic(err)
-			return err
 		}
 		if text == "" {
 			return nil
 		}
 
 		var dpl serial.DocPageLocations
-		for _, loc := range locations {
-			dpl.Locations = append(dpl.Locations, ToSerialTextLocation(loc))
+		for i, loc := range locations {
+			stl := ToSerialTextLocation(loc)
+			common.Log.Info("%d: %s", i, stl)
+			dpl.Locations = append(dpl.Locations, stl)
 		}
 
 		pageIdx, err := lDoc.AddPage(pageNum, dpl, text)
@@ -158,6 +159,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			panic(err)
 			return err
 		}
+		// panic("1") // !@#$ CALLED
 		if pageNum == 0 {
 			panic("qqqq")
 		}
@@ -302,12 +304,13 @@ func (d DocPositions) String() string {
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
 func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32) (
 	string, uint32, serial.DocPageLocations, error) {
+
 	lDoc, err := lState.OpenPositionsDoc(docIdx)
 	if err != nil {
 		return "", 0, serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
-	common.Log.Debug("lDoc=%s", lDoc)
+	common.Log.Info("lDoc=%s", lDoc)
 	pageNum, dpl, err := lDoc.ReadPagePositions(pageIdx)
 	return lDoc.inPath, pageNum, dpl, err
 }
@@ -401,6 +404,7 @@ func (lDoc *DocPositions) Close() error {
 	return lDoc.dataFile.Close()
 }
 
+// AddPage adds a page (with page number `pageNum` and contents `dpl`) to `lDoc`.
 // !@#$ Remove `text` param.
 func (lDoc *DocPositions) AddPage(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
 	if pageNum == 0 {
@@ -528,10 +532,12 @@ type DocPageText struct {
 // ToSerialTextLocation converts extractor.TextLocation `loc` to a more compact serial.TextLocation.
 func ToSerialTextLocation(loc extractor.TextLocation) serial.TextLocation {
 	b := loc.BBox
-	// bbox := b
-	// if math.Abs(bbox.Urx-bbox.Llx) < 1.0 || math.Abs(bbox.Ury-bbox.Lly) < 1.0 {
-	// 	panic(fmt.Errorf("bbox=%+v", bbox))
-	// }
+	bbox := b
+	if loc.Text != "" && loc.Text != " " {
+		if math.Abs(bbox.Urx-bbox.Llx) < 1.0 || math.Abs(bbox.Ury-bbox.Lly) < 1.0 {
+			panic(fmt.Errorf("bbox=%+v\nloc=%#v", bbox, loc))
+		}
+	}
 	return serial.TextLocation{
 		Offset: uint32(loc.Offset),
 		Llx:    float32(b.Llx),

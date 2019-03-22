@@ -11,7 +11,7 @@ import (
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
 
-// ExtractList is a list of document:page inputs that are to be combined in a specified order
+// ExtractList is a list of document:page inputs that are to be combined in a specified order.
 type ExtractList struct {
 	maxPages  int
 	sources   []Extract // Source pages in order they will be combined
@@ -97,6 +97,7 @@ func (l *ExtractList) NumPages() int {
 // 	l.docPages[inPath].pageNums = append(l.docPages[inPath].pageNums, pageNum)
 // }
 
+// SaveOutputPdf is called by position_search.go
 func (l *ExtractList) SaveOutputPdf(outPath string) error {
 	common.Log.Info("l=%s", *l)
 	for inPath, docContents := range l.contents {
@@ -142,8 +143,9 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 			common.Log.Error("%d: %+v ", i, src)
 			return err
 		}
+
 		// h := pageContent.page.MediaBox.Ury
-		for _, r := range pageContent.rects[:1] {
+		for _, r := range pageContent.rects {
 			common.Log.Info("@@@@ %q:%d %s", filepath.Base(src.inPath), src.pageNum, rectString(r))
 			// rect := c.NewRectangle(r.Llx, h-r.Lly, r.Urx-r.Llx, -(r.Ury - r.Lly))
 			rect := c.NewRectangle(r.Llx, r.Lly, r.Urx-r.Llx, r.Ury-r.Lly)
@@ -152,7 +154,7 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 				panic(fmt.Errorf("bbox=%+v", bbox))
 			}
 			rect.SetBorderColor(creator.ColorRGBFromHex("#0000ff")) // Red border
-			rect.SetBorderWidth(1.0)
+			rect.SetBorderWidth(20.0)                               // !@#$ For testing.
 			if err := c.Draw(rect); err != nil {
 				panic(err)
 				return err

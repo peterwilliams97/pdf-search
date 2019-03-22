@@ -3,6 +3,14 @@ Pure Go Full Text Search of PDF Files
 
 The repo has a series of example programs for doing [full text search](https://en.wikipedia.org/wiki/Full-text_search) on PDF files in pure Go. It uses [UniDoc](https://unidoc.io/) for PDF parsing and [bleve](http://github.com/blevesearch/bleve) for search.
 
+### Page Indexing
+https://www.hathitrust.org/blogs/large-scale-search/tale-two-solrs-0
+
+https://www.hathitrust.org/full-text-search-features-and-analysis
+
+Libraries
+=========
+
 The simple programs are to explore the UniDoc and Bleve libraries.
 
 Installation (UniDoc)
@@ -136,5 +144,5 @@ TODO
 			Line Y and height
 			Start of word
 *  - ReadDocPageLocations Gather all (doc,page) entries, open the necessary docs and return the pages.
-
+* parts => strings.Builder https://golang.org/pkg/strings/#Builder
 

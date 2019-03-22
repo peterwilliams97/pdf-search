@@ -64,7 +64,7 @@ func main() {
 	search.Highlight = bleve.NewHighlight()
 	search.Fields = []string{"Text"}
 	search.Highlight.Fields = search.Fields
-	search.Explain = true
+	// search.Explain = true
 
 	searchResults, err := index.Search(search)
 	if err != nil {
@@ -111,27 +111,27 @@ func main() {
 		text := hit.Fields["Text"].(string)
 		locations := hit.Locations
 		contents := locations["Text"]
-		expl := hit.Expl
+		// expl := hit.Expl
 
-		doc, err := index.Document(id)
-		if err != nil {
-			panic(err)
-		}
+		// doc, err := index.Document(id)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
-		termLocations, bestFragments, formattedFragments := highlighter.BestFragmentsInField2(hit, doc, "Text", 5)
-		lens := make([]int, len(formattedFragments))
-		for i, f := range formattedFragments {
-			lens[i] = len(f)
-		}
-		fmt.Printf("##1 formattedFragments=%d %+v<<<<\n", len(formattedFragments), lens)
-		fmt.Printf("##2 bestFragments=%d %T<<<<\n", len(bestFragments), bestFragments)
-		for k, f := range bestFragments {
-			fmt.Printf("\t%2d: %s\n\t%+q\n", k, *f, f.Snip(text))
-		}
-		fmt.Printf("##3 termLocations=%d %T<<<<\n", len(termLocations), termLocations)
-		for k, f := range termLocations {
-			fmt.Printf("\t%2d: %+v %+q\n", k, *f, f.Snip(text))
-		}
+		// termLocations, bestFragments, formattedFragments := highlighter.BestFragmentsInField2(hit, doc, "Text", 5)
+		// lens := make([]int, len(formattedFragments))
+		// for i, f := range formattedFragments {
+		// 	lens[i] = len(f)
+		// }
+		// fmt.Printf("##1 formattedFragments=%d %+v<<<<\n", len(formattedFragments), lens)
+		// fmt.Printf("##2 bestFragments=%d %T<<<<\n", len(bestFragments), bestFragments)
+		// for k, f := range bestFragments {
+		// 	fmt.Printf("\t%2d: %s\n\t%+q\n", k, *f, f.Snip(text))
+		// }
+		// fmt.Printf("##3 termLocations=%d %T<<<<\n", len(termLocations), termLocations)
+		// for k, f := range termLocations {
+		// 	fmt.Printf("\t%2d: %+v %+q\n", k, *f, f.Snip(text))
+		// }
 
 		fmt.Printf("===>>> %2d: id=%q hit=%T=%s %d fragments\n", i, id, hit, hit, len(hit.Fragments))
 		j := 0
@@ -142,8 +142,8 @@ func main() {
 			}
 			j++
 		}
-		fmt.Printf("==@>>> expl=%s\n", expl)
-		fmt.Println("--------------------------------------------")
+		// fmt.Printf("==@>>> expl=%s\n", expl)
+		// fmt.Println("--------------------------------------------")
 
 		docIdx, pageIdx, err := decodeID(id)
 		if err != nil {
@@ -156,7 +156,7 @@ func main() {
 
 		positions := dpl.Locations
 
-		fmt.Printf("--->>> %2d: pageNum=%d id=%q hit=%s Locations=%d text=%d  positions=%d\n",
+		fmt.Printf("--->>> %2d: pageNum=%d id=%q hit=%s Locations=%d text=%d positions=%d\n",
 			i, pageNum, id, hit,
 			len(locations), len(text), len(positions))
 

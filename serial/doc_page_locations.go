@@ -3,6 +3,7 @@ package serial
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"os"
 
@@ -56,6 +57,11 @@ func RReadDocPageLocations(f *os.File) (DocPageLocations, error) {
 type TextLocation struct {
 	Offset             uint32
 	Llx, Lly, Urx, Ury float32
+}
+
+func (t TextLocation) String() string {
+	return fmt.Sprintf("{TextLocation: %d (%5.1f, %5.1f) (%5.1f, %5.1f)", t.Offset,
+		t.Llx, t.Lly, t.Urx, t.Ury)
 }
 
 // table DocPageLocations  {
