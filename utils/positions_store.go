@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -154,7 +155,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			dpl.Locations = append(dpl.Locations, stl)
 		}
 
-		pageIdx, err := lDoc.AddPage(pageNum, dpl, text)
+		pageIdx, err := lDoc.AddDocPage(pageNum, dpl, text)
 		if err != nil {
 			panic(err)
 			return err
@@ -283,14 +284,16 @@ type byteSpan struct {
 
 // DocPositions tracks the data that is used to index a PDF file.
 type DocPositions struct {
-	inPath    string
-	lState    *PositionsState // State of whole store.
-	docIdx    uint64
-	dataFile  *os.File   // Positions are stored in this file.
-	spans     []byteSpan // Indexes into `dataFile`. These is a byteSpan per page.
-	dataPath  string     // Path of `dataFile`.
-	spansPath string     // Path where `spans` is saved.
-	textDir   string
+	inPath      string
+	lState      *PositionsState // State of whole store.
+	docIdx      uint64
+	dataFile    *os.File                        // Positions are stored in this file.
+	spans       []byteSpan                      // Indexes into `dataFile`. These is a byteSpan per page.
+	dataPath    string                          // Path of `dataFile`.
+	spansPath   string                          // Path where `spans` is saved.
+	textDir     string                          // !@#$ Debugging
+	pageDpl     map[int]serial.DocPageLocations // !@#$ Debugging
+	pageDplPath string
 }
 
 func (d DocPositions) String() string {
@@ -347,6 +350,12 @@ func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, er
 	return lDoc, err
 }
 
+func (lState *PositionsState) GetHashPath(docIdx uint64) (hash, inPath string) {
+	hash = lState.indexHash[docIdx]
+	inPath = lState.hashPath[hash]
+	return hash, inPath
+}
+
 func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, error) {
 	lDoc := lState.baseFields(docIdx)
 
@@ -377,12 +386,14 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	locPath := lState.docPath(hash)
 
 	dp := DocPositions{
-		lState:    lState,
-		inPath:    inPath,
-		docIdx:    docIdx,
-		dataPath:  locPath + ".dat",
-		spansPath: locPath + ".idx.json",
-		textDir:   locPath + ".pages",
+		lState:      lState,
+		inPath:      inPath,
+		docIdx:      docIdx,
+		dataPath:    locPath + ".dat",
+		spansPath:   locPath + ".idx.json",
+		textDir:     locPath + ".pages",
+		pageDplPath: locPath + ".dpl.json",
+		pageDpl:     map[int]serial.DocPageLocations{},
 	}
 	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp
@@ -397,19 +408,50 @@ func (lDoc *DocPositions) Save() error {
 }
 
 func (lDoc *DocPositions) Close() error {
-	err := lDoc.Save()
-	if err != nil {
+	if err := lDoc.saveJsonDebug(); err != nil {
+		return err
+	}
+	if err := lDoc.Save(); err != nil {
 		return err
 	}
 	return lDoc.dataFile.Close()
 }
 
-// AddPage adds a page (with page number `pageNum` and contents `dpl`) to `lDoc`.
+func (lDoc *DocPositions) saveJsonDebug() error {
+	common.Log.Info("saveJsonDebug: pageDpl=%d pageDplPath=%q",
+		len(lDoc.pageDpl), lDoc.pageDplPath)
+	var pageNums []int
+	for p := range lDoc.pageDpl {
+		pageNums = append(pageNums, p)
+	}
+	sort.Ints(pageNums)
+	common.Log.Info("saveJsonDebug: pageNums=%+v", pageNums)
+	var data []byte
+	for _, p := range pageNums {
+		dpl := lDoc.pageDpl[p]
+		dpl.Doc = uint64(lDoc.docIdx)
+		dpl.Page = uint32(p)
+		b, err := json.MarshalIndent(dpl, "", "\t")
+		if err != nil {
+			return err
+		}
+		common.Log.Info("saveJsonDebug: page %d: %d bytes", p, len(b))
+		data = append(data, b...)
+		// panic("2")
+	}
+	// panic("3")
+	return ioutil.WriteFile(lDoc.pageDplPath, data, 0666)
+}
+
+// AddDocPage adds a page (with page number `pageNum` and contents `dpl`) to `lDoc`.
 // !@#$ Remove `text` param.
-func (lDoc *DocPositions) AddPage(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
+func (lDoc *DocPositions) AddDocPage(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
 	if pageNum == 0 {
 		panic("0000")
 	}
+
+	lDoc.pageDpl[pageNum] = dpl // !@#$
+
 	b := flatbuffers.NewBuilder(0)
 	buf := serial.MakeDocPageLocations(b, dpl)
 	check := crc32.ChecksumIEEE(buf) // uint32
@@ -534,15 +576,18 @@ func ToSerialTextLocation(loc extractor.TextLocation) serial.TextLocation {
 	b := loc.BBox
 	bbox := b
 	if loc.Text != "" && loc.Text != " " {
-		if math.Abs(bbox.Urx-bbox.Llx) < 1.0 || math.Abs(bbox.Ury-bbox.Lly) < 1.0 {
-			panic(fmt.Errorf("bbox=%+v\nloc=%#v", bbox, loc))
+		dx := bbox.Urx - bbox.Llx
+		dy := bbox.Ury - bbox.Lly
+		if math.Abs(dx) < extractor.MinBBox || math.Abs(dy) < extractor.MinBBox {
+			common.Log.Error("bbox=%+v\nloc=%#v", bbox, loc)
+			panic(fmt.Errorf("bbox=%+v dx,dy=%.2f,%.2f", bbox, dx, dy))
 		}
 	}
 	return serial.TextLocation{
-		Offset: uint32(loc.Offset),
-		Llx:    float32(b.Llx),
-		Lly:    float32(b.Lly),
-		Urx:    float32(b.Urx),
-		Ury:    float32(b.Ury),
+		Start: uint32(loc.Offset),
+		Llx:   float32(b.Llx),
+		Lly:   float32(b.Lly),
+		Urx:   float32(b.Urx),
+		Ury:   float32(b.Ury),
 	}
 }

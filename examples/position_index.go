@@ -47,6 +47,9 @@ func main() {
 		os.Exit(1)
 	}
 	pathList = utils.CleanCorpus(pathList)
+	if len(pathList) > 5860 { // !@#$
+		pathList = pathList[5860:]
+	}
 
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -102,9 +103,11 @@ func main() {
 	}
 	// !!!!
 
-	extractions := utils.CreateExtractList(10)
+	const maxPages = 20 // !@#$
+	extractions := utils.CreateExtractList(maxPages)
 	for i, hit := range searchResults.Hits {
-		if i >= 2 {
+		if i >= maxPages {
+			common.Log.Info("Terminating after %d pages", maxPages)
 			break
 		}
 		id := hit.ID
@@ -156,9 +159,14 @@ func main() {
 
 		positions := dpl.Locations
 
-		fmt.Printf("--->>> %2d: pageNum=%d id=%q hit=%s Locations=%d text=%d positions=%d\n",
+		hash, inPath := lState.GetHashPath(docIdx)
+
+		common.Log.Info("--->>> %2d: pageNum=%d id=%q hit=%s Locations=%d text=%d positions=%d\n"+
+			"\t%#q %q",
 			i, pageNum, id, hit,
-			len(locations), len(text), len(positions))
+			len(locations), len(text), len(positions),
+			hash, filepath.Base(inPath),
+		)
 
 		// for j, pos := range positions {
 		// 	fmt.Printf("%6d: %v\n", j, pos)
@@ -171,10 +179,20 @@ func main() {
 			for j, loc := range termLocations {
 				l := *loc
 				snip := text[l.Start:l.End]
-				pos := getPosition(positions, uint32(l.Start))
-				fmt.Printf("** %9d: %d [%d:%d] %q %v\n", j, l.Pos, l.Start, l.End, snip, pos)
+				pos := getPosition(positions, uint32(l.Start), uint32(l.End))
+				common.Log.Info("*~* %9d: %d [%d:%d] %q %v", j, l.Pos, l.Start, l.End, snip, pos)
 				extractions.AddRect(inPath, int(pageNum),
 					float64(pos.Llx), float64(pos.Lly), float64(pos.Urx), float64(pos.Ury))
+				bad := ""
+				if dx := float64(pos.Urx - pos.Llx); math.Abs(dx) > 200 {
+					bad += fmt.Sprintf("badX=%1.f", dx)
+				}
+				if dy := float64(pos.Ury - pos.Lly); math.Abs(dy) > 200 {
+					bad += fmt.Sprintf("badX=%1.f", dy)
+				}
+				if bad != "" {
+					common.Log.Error("$$$ bad: %s", bad)
+				}
 			}
 		}
 	}
@@ -186,14 +204,44 @@ func main() {
 	fmt.Printf("indexPath=%q\n", indexPath)
 }
 
-func getPosition(positions []serial.TextLocation, offset uint32) serial.TextLocation {
-	i := sort.Search(len(positions), func(i int) bool { return positions[i].Offset >= offset })
-	if !(0 <= i && i < len(positions)) {
-		common.Log.Error("getPosition: offset=%d i=%d len=%d %v==%v", offset, i, len(positions),
-			positions[0], positions[len(positions)-1])
+func getPosition(positions []serial.TextLocation, start, end uint32) serial.TextLocation {
+	i0, ok0 := getPositionIndex(positions, end)
+	i1, ok1 := getPositionIndex(positions, start)
+	if !(ok0 && ok1) {
 		return serial.TextLocation{}
 	}
-	return positions[i]
+	p0, p1 := positions[i0], positions[i1]
+	return serial.TextLocation{
+		Start: start,
+		End:   end,
+		Llx:   min(p0.Llx, p1.Llx),
+		Lly:   min(p0.Lly, p1.Lly),
+		Urx:   max(p0.Urx, p1.Urx),
+		Ury:   max(p0.Ury, p1.Ury),
+	}
+}
+
+func getPositionIndex(positions []serial.TextLocation, offset uint32) (int, bool) {
+	i := sort.Search(len(positions), func(i int) bool { return positions[i].Start >= offset })
+	ok := 0 <= i && i < len(positions)
+	if !ok {
+		common.Log.Error("getPositionIndex: offset=%d i=%d len=%d %v==%v", offset, i, len(positions),
+			positions[0], positions[len(positions)-1])
+	}
+	return i, ok
+}
+
+func min(x, y float32) float32 {
+	if x < y {
+		return x
+	}
+	return y
+}
+func max(x, y float32) float32 {
+	if x > y {
+		return x
+	}
+	return y
 }
 
 // id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)

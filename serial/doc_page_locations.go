@@ -55,12 +55,13 @@ func RReadDocPageLocations(f *os.File) (DocPageLocations, error) {
 // 	ury: float32;
 // }
 type TextLocation struct {
-	Offset             uint32
+	Start, End         uint32
 	Llx, Lly, Urx, Ury float32
 }
 
 func (t TextLocation) String() string {
-	return fmt.Sprintf("{TextLocation: %d (%5.1f, %5.1f) (%5.1f, %5.1f)", t.Offset,
+	return fmt.Sprintf("{TextLocation: %d:%d (%5.1f, %5.1f) (%5.1f, %5.1f)",
+		t.Start, t.End,
 		t.Llx, t.Lly, t.Urx, t.Ury)
 }
 
@@ -93,7 +94,7 @@ func MakeTextLocation(b *flatbuffers.Builder, loc TextLocation) []byte {
 func addTextLocation(b *flatbuffers.Builder, loc TextLocation) flatbuffers.UOffsetT {
 	// Write the TextLocation object.
 	locations.TextLocationStart(b)
-	locations.TextLocationAddOffset(b, loc.Offset)
+	locations.TextLocationAddOffset(b, loc.Start)
 	locations.TextLocationAddLlx(b, loc.Llx)
 	locations.TextLocationAddLly(b, loc.Lly)
 	locations.TextLocationAddUrx(b, loc.Urx)
@@ -111,6 +112,7 @@ func getTextLocation(loc *locations.TextLocation) TextLocation {
 	// Copy the TextLocation's fields (since these are numbers).
 	return TextLocation{
 		loc.Offset(),
+		0,
 		loc.Llx(),
 		loc.Lly(),
 		loc.Urx(),

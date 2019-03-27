@@ -8,6 +8,7 @@ import (
 
 	"github.com/unidoc/unidoc/common"
 	"github.com/unidoc/unidoc/pdf/creator"
+	"github.com/unidoc/unidoc/pdf/extractor"
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
 
@@ -144,17 +145,26 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 			return err
 		}
 
-		// h := pageContent.page.MediaBox.Ury
+		h := pageContent.page.MediaBox.Ury
+		shift := 2.0 // !@#$ Hack to line up highlight box
 		for _, r := range pageContent.rects {
 			common.Log.Info("@@@@ %q:%d %s", filepath.Base(src.inPath), src.pageNum, rectString(r))
-			// rect := c.NewRectangle(r.Llx, h-r.Lly, r.Urx-r.Llx, -(r.Ury - r.Lly))
-			rect := c.NewRectangle(r.Llx, r.Lly, r.Urx-r.Llx, r.Ury-r.Lly)
+			rect := c.NewRectangle(r.Llx, h-r.Lly+shift, r.Urx-r.Llx, -(r.Ury - r.Lly + shift))
+			// rect := c.NewRectangle(r.Llx, r.Lly, r.Urx-r.Llx, r.Ury-r.Lly)
 			bbox := r
-			if math.Abs(bbox.Urx-bbox.Llx) < 1.0 || math.Abs(bbox.Ury-bbox.Lly) < 1.0 {
-				panic(fmt.Errorf("bbox=%+v", bbox))
+			dx := bbox.Urx - bbox.Llx
+			dy := bbox.Ury - bbox.Lly
+			if math.Abs(dx) < extractor.MinBBox || math.Abs(dy) < extractor.MinBBox {
+				panic(fmt.Errorf("bbox=%+v dx,dy=%g,%g", bbox, dx, dy))
+			}
+			rect.SetBorderColor(creator.ColorRGBFromHex("#ffffff")) // Red border
+			rect.SetBorderWidth(3.5)                                // !@#$ For testing.
+			if err := c.Draw(rect); err != nil {
+				panic(err)
+				return err
 			}
 			rect.SetBorderColor(creator.ColorRGBFromHex("#0000ff")) // Red border
-			rect.SetBorderWidth(20.0)                               // !@#$ For testing.
+			rect.SetBorderWidth(3.0)                                // !@#$ For testing.
 			if err := c.Draw(rect); err != nil {
 				panic(err)
 				return err
