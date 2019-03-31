@@ -13,11 +13,11 @@ const usage = `Usage: go run position_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.position" that was created with
 simple_index.go`
 
-var basePath = "store.position"
+var persistDir = "store.position"
 
 func main() {
 	maxResults := 10
-	flag.StringVar(&basePath, "s", basePath, "Bleve store name. This is a directory.")
+	flag.StringVar(&persistDir, "s", persistDir, "Bleve store name. This is a directory.")
 	flag.IntVar(&maxResults, "n", maxResults, "Max number of results to return.")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
@@ -33,7 +33,7 @@ func main() {
 
 	term := strings.Join(flag.Args(), " ")
 
-	results, err := utils.SearchPdfIndex(basePath, term, maxResults)
+	results, err := utils.SearchPdfIndex(persistDir, term, maxResults)
 	if err != nil {
 		panic(err)
 	}

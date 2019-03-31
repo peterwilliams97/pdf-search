@@ -14,10 +14,10 @@ import (
 const usage = `Usage: go run simple_index.go [OPTIONS] PDF32000_2008.pdf
 Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`
 
-var basePath = "store.simple"
+var persistDir = "store.simple"
 
 func main() {
-	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
+	flag.StringVar(&persistDir, "s", persistDir, "Index store directory name.")
 	var forceCreate, allowAppend bool
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
@@ -34,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	indexPath := filepath.Join(basePath, "bleve")
+	indexPath := filepath.Join(persistDir, "bleve")
 	fmt.Printf("indexPath=%q\n", indexPath)
 
 	// Read the list of PDF files that will be processed.

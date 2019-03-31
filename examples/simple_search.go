@@ -16,10 +16,10 @@ const usage = `Usage: go run simple_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.simple" that was created with
 simple_index.go`
 
-var basePath = "store.simple"
+var persistDir = "store.simple"
 
 func main() {
-	flag.StringVar(&basePath, "s", basePath, "Index store directory name.")
+	flag.StringVar(&persistDir, "s", persistDir, "Index store directory name.")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
@@ -31,7 +31,7 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	indexPath := filepath.Join(basePath, "bleve")
+	indexPath := filepath.Join(persistDir, "bleve")
 
 	term := strings.Join(flag.Args(), " ")
 	fmt.Printf("term=%q\n", term)
