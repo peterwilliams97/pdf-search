@@ -14,12 +14,101 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blevesearch/bleve"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/peterwilliams97/pdf-search/serial"
 	"github.com/unidoc/unidoc/common"
 	"github.com/unidoc/unidoc/pdf/extractor"
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
+
+// IndexPdfs creates a bleve+PositionsState index for `pathList`. If `persistDir` is not empty, the
+// index is written to this directory.
+func IndexPdfs(pathList []string, persistDir string, forceCreate, allowAppend bool) (
+	*PositionsState, bleve.Index, error) {
+	fmt.Fprintf(os.Stderr, "Indexing %d PDF files.\n", len(pathList))
+
+	lState, err := OpenPositionsState(persistDir, forceCreate)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Could not create positions store %q. err=%v", persistDir, err)
+	}
+	defer lState.Flush()
+
+	var index bleve.Index
+	if len(persistDir) == 0 {
+		index, err = CreateBleveMemIndex()
+		if err != nil {
+			return nil, nil, fmt.Errorf("Could not create Bleve memoryindex. err=%v", err)
+		}
+	} else {
+		indexPath := filepath.Join(persistDir, "bleve")
+		common.Log.Info("indexPath=%q", indexPath)
+		// Create a new Bleve index.
+		index, err = CreateBleveIndex(indexPath, forceCreate, allowAppend)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Could not create Bleve index in %q", indexPath)
+		}
+	}
+
+	// Add the pages of all the PDFs in `pathList` to `index`.
+	for i, inPath := range pathList {
+		fmt.Fprintf(os.Stderr, ">> %3d of %d: %q\n", i+1, len(pathList), inPath)
+		err := indexDocPagesLoc(index, lState, inPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Could not index file %q", inPath)
+		}
+		docCount, err := index.DocCount()
+		if err != nil {
+			return nil, nil, err
+		}
+		common.Log.Info("Indexed %q. Total %d pages indexed.", inPath, docCount)
+	}
+	return lState, index, nil
+}
+
+type IDText struct {
+	ID   string
+	Text string
+}
+
+// indexDocPagesLoc adds the text of all the pages in PDF file `inPath` to Bleve index `index`.
+func indexDocPagesLoc(index bleve.Index, lState *PositionsState, inPath string) error {
+	docPages, err := lState.ExtractDocPagePositions(inPath)
+	if err != nil {
+		fmt.Printf("indexDocPagesLoc: Couldn't extract pages from %q err=%v\n", inPath, err)
+		return nil
+	}
+	fmt.Printf("indexDocPagesLoc: inPath=%q docPages=%d\n", inPath, len(docPages))
+
+	// for _, l := range docPages {
+	// 	dpl := l.ToDocPageLocations()
+	// 	if err := serial.WriteDocPageLocations(locationsFile, dpl); err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	t0 := time.Now()
+	for i, l := range docPages {
+		// Don't weigh down the Bleve index with the text bounding boxes.
+		id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
+		idText := IDText{ID: id, Text: l.Text}
+
+		err = index.Index(id, idText)
+		dt := time.Since(t0)
+		if err != nil {
+			return err
+		}
+		if i%100 == 0 {
+			fmt.Printf("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)\n",
+				i+1, len(docPages), dt.Seconds(), dt.Seconds()/float64(i+1))
+			fmt.Printf("\tid=%q text=%d\n", id, len(idText.Text))
+		}
+	}
+	dt := time.Since(t0)
+	fmt.Printf("\tIndexed %d pages in %.1f sec (%.3f sec/page)\n",
+		len(docPages), dt.Seconds(), dt.Seconds()/float64(len(docPages)))
+	return nil
+}
 
 /*
    PositionsState is for serializing and accesing DocPageLocations.
@@ -82,6 +171,10 @@ func (l PositionsState) Len() int {
 	return len(l.fileList)
 }
 
+func (l PositionsState) isMem() bool {
+	return l.root == ""
+}
+
 func (lState PositionsState) indexToPath(idx uint64) (string, bool) {
 	hash, ok := lState.indexHash[idx]
 	if !ok {
@@ -98,33 +191,35 @@ func (lState PositionsState) positionsDir() string {
 // OpenPositionsState loads indexes from an existing locations directory `root` or creates one if it
 // doesn't exist.
 // When opening for writing, do this to ensure final index is written to disk:
-//    lState, err := utils.OpenPositionsState(basePath, forceCreate)
+//    lState, err := utils.OpenPositionsState(persistDir, forceCreate)
 //    defer lState.Flush()
 func OpenPositionsState(root string, forceCreate bool) (*PositionsState, error) {
-	lState := PositionsState{root: root}
-	if forceCreate {
-		if err := lState.removePositionsState(); err != nil {
+	lState := PositionsState{
+		root:      root,
+		hashIndex: map[string]uint64{},
+		indexHash: map[uint64]string{},
+		hashPath:  map[string]string{},
+	}
+	if !lState.isMem() {
+		if forceCreate {
+			if err := lState.removePositionsState(); err != nil {
+				return nil, err
+			}
+		}
+		filename := lState.fileListPath()
+		fileList, err := loadFileList(filename)
+		if err != nil {
 			return nil, err
+		}
+		lState.fileList = fileList
+
+		for i, hip := range fileList {
+			lState.hashIndex[hip.Hash] = uint64(i)
+			lState.indexHash[uint64(i)] = hip.Hash
+			lState.hashPath[hip.Hash] = hip.InPath
 		}
 	}
 
-	filename := lState.fileListPath()
-	fileList, err := loadFileList(filename)
-	if err != nil {
-		return nil, err
-	}
-	hashIndex := map[string]uint64{}
-	indexHash := map[uint64]string{}
-	hashPath := map[string]string{}
-	for i, hip := range fileList {
-		hashIndex[hip.Hash] = uint64(i)
-		indexHash[uint64(i)] = hip.Hash
-		hashPath[hip.Hash] = hip.InPath
-	}
-	lState.fileList = fileList
-	lState.hashIndex = hashIndex
-	lState.indexHash = indexHash
-	lState.hashPath = hashPath
 	lState.updateTime = time.Now()
 
 	fmt.Fprintf(os.Stderr, "lState=%s\n", lState)
@@ -226,6 +321,9 @@ func (lState *PositionsState) addFile(fd FileDesc) (uint64, string, bool) {
 }
 
 func (lState *PositionsState) Flush() error {
+	if lState.isMem() {
+		return nil
+	}
 	dt := time.Since(lState.updateTime)
 	docIdx := uint64(len(lState.fileList) - 1)
 	fmt.Fprintf(os.Stderr, "*** Flush %3d files (%4.1f sec) %s\n",
@@ -260,9 +358,9 @@ func (lState *PositionsState) removePositionsState() error {
 // docPath returns the file path to the positions files for PDF with hash `hash`.
 func (lState *PositionsState) docPath(hash string) string {
 	common.Log.Trace("docPath: %q %s", lState.positionsDir(), hash)
-	// if lState.positionsDir == "" {
-	// 	panic(hash)
-	// }
+	if lState.isMem() {
+		panic(fmt.Errorf("lState=%s", *lState))
+	}
 	return filepath.Join(lState.positionsDir(), hash)
 }
 
@@ -270,6 +368,9 @@ func (lState *PositionsState) docPath(hash string) string {
 // It is called at the start of CreatePositionsDoc() which allows us to avoid creating our directory
 // structure until we have successfully extracted the text from a PDF pages.
 func (lState *PositionsState) createIfNecessary() error {
+	if lState.root == "" {
+		panic(fmt.Errorf("lState=%s", *lState))
+	}
 	d := lState.positionsDir()
 	common.Log.Trace("createIfNecessary: 1 positionsDir=%q", d)
 	if Exists(d) {
@@ -315,7 +416,6 @@ func (d DocPositions) String() string {
 }
 
 func (lState *PositionsState) ReadDocPageText(docIdx uint64, pageIdx uint32) (string, error) {
-
 	lDoc, err := lState.OpenPositionsDoc(docIdx)
 	if err != nil {
 		return "", err
@@ -348,23 +448,25 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 // CreatePositionsDoc opens lDoc.dataPath for writing.
 func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, error) {
 	common.Log.Debug("CreatePositionsDoc: lState.positionsDir=%q", lState.positionsDir())
+
 	docIdx, p, exists := lState.addFile(fd)
 	if exists {
 		common.Log.Error("ExtractDocPagePositions: %q is the same PDF as %q. Ignoring",
 			fd.InPath, p)
-		// panic(errors.New("duplicate PDF"))
+		panic(errors.New("duplicate PDF"))
 		return nil, errors.New("duplicate PDF")
 	}
 	lDoc := lState.baseFields(docIdx)
+
+	if lState.isMem() {
+		return lDoc, nil
+	}
 
 	err := lState.createIfNecessary()
 	if err != nil {
 		panic(err)
 	}
-	if strings.HasPrefix(lDoc.dataPath, "9") {
-		common.Log.Error("lState.positionsDir=%q", lState.positionsDir())
-		panic(lDoc.dataPath)
-	}
+
 	if lState.positionsDir() == "" {
 		panic("gggg")
 	}
@@ -384,6 +486,9 @@ func (lState *PositionsState) GetHashPath(docIdx uint64) (hash, inPath string) {
 }
 
 func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, error) {
+	if lState.root == "" {
+		panic(fmt.Errorf("lState=%s", *lState))
+	}
 	lDoc := lState.baseFields(docIdx)
 
 	f, err := os.Open(lDoc.dataPath)
@@ -414,17 +519,20 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	}
 	inPath := lState.fileList[docIdx].InPath
 	hash := lState.fileList[docIdx].Hash
-	locPath := lState.docPath(hash)
 
 	dp := DocPositions{
-		lState:      lState,
-		inPath:      inPath,
-		docIdx:      docIdx,
-		dataPath:    locPath + ".dat",
-		spansPath:   locPath + ".idx.json",
-		textDir:     locPath + ".pages",
-		pageDplPath: locPath + ".dpl.json",
-		pageDpl:     map[int]serial.DocPageLocations{},
+		lState:  lState,
+		inPath:  inPath,
+		docIdx:  docIdx,
+		pageDpl: map[int]serial.DocPageLocations{},
+	}
+
+	if !lState.isMem() {
+		locPath := lState.docPath(hash)
+		dp.dataPath = locPath + ".dat"
+		dp.spansPath = locPath + ".idx.json"
+		dp.textDir = locPath + ".pages"
+		dp.pageDplPath = locPath + ".dpl.json"
 	}
 	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp

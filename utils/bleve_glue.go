@@ -28,6 +28,14 @@ func CreateBleveIndex(indexPath string, forceCreate, allowAppend bool) (bleve.In
 	return index, err
 }
 
+// CreateBleveMemIndex creates a new in-memory (unpersisted) Bleve index.
+func CreateBleveMemIndex() (bleve.Index, error) {
+	// Create a new index.
+	mapping := bleve.NewIndexMapping()
+	index, err := bleve.NewMemOnly(mapping)
+	return index, err
+}
+
 // removeIndex removes the Bleve index persistent data in `indexPath` from disk.
 func removeIndex(indexPath string) {
 	metaPath := filepath.Join(indexPath, "index_meta.json")

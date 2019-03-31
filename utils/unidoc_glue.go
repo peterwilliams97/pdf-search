@@ -34,13 +34,14 @@ JYUUjfjjpek96Rh2LoPy4LbWEHT5X46PxLyNkMyF74L/eNeLR55vcvvi2MIUtZBamCbay+YjmqZu5n6I
 	}
 	pdf.SetPdfCreator("PDF Search")
 
-	flag.BoolVar(&ShowHelp, "h", false, "Show this help message.")
+	// flag.BoolVar(&ShowHelp, "h", false, "Show this help message.")
 	flag.BoolVar(&Debug, "d", false, "Print debugging information.")
 	flag.BoolVar(&Trace, "e", false, "Print detailed debugging information.")
 	if Trace {
 		Debug = true
 	}
 	flag.BoolVar(&RecoverErrors, "r", false, "Recover from errors in library functions.")
+	fmt.Printf("*** ShowHelp=%t Debug=%t Trace=%t\n", ShowHelp, Debug, Trace)
 }
 
 func SetLogging() {
@@ -51,6 +52,10 @@ func SetLogging() {
 	} else {
 		common.SetLogger(common.NewConsoleLogger(common.LogLevelInfo))
 	}
+	common.Log.Error("Error")
+	common.Log.Info("ShowHelp=%t Debug=%t Trace=%t", ShowHelp, Debug, Trace)
+	common.Log.Debug("Debug")
+	common.Log.Trace("Trace")
 }
 
 // PdfOpen opens PDF file `inPath` and attempts to handle null encryption schemes.
