@@ -12,8 +12,8 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
-const usage = `Usage: go run location_index.go [OPTIONS] PDF32000_2008.pdf
-Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.simple.`
+const usage = `Usage: go run position_index.go [OPTIONS] PDF32000_2008.pdf
+Runs UniDoc PDF text extraction on PDF32000_2008.pdf and writes a Bleve index to store.position.`
 
 var basePath = "store.position"
 var minFileNum = -1
@@ -46,12 +46,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
 		os.Exit(1)
 	}
+	fmt.Fprintf(os.Stderr, "Total of %d PDF files.\n", len(pathList))
 	pathList = utils.CleanCorpus(pathList)
 	if len(pathList) > 5860 { // !@#$
 		pathList = pathList[5860:]
 	}
 
-	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
+	fmt.Fprintf(os.Stderr, "Indexing %d PDF files.\n", len(pathList))
 
 	lState, err := utils.OpenPositionsState(basePath, forceCreate)
 	if err != nil {

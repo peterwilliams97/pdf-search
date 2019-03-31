@@ -13,14 +13,15 @@ import (
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/registry"
+	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/highlight"
 	"github.com/peterwilliams97/pdf-search/serial"
 	"github.com/peterwilliams97/pdf-search/utils"
 	"github.com/unidoc/unidoc/common"
 )
 
-const usage = `Usage: go run location_search.go [OPTIONS] Adobe PDF
-Performs a full text search for "Adobe PDF" in Bleve index "store.location" that was created with
+const usage = `Usage: go run position_search.go [OPTIONS] Adobe PDF
+Performs a full text search for "Adobe PDF" in Bleve index "store.position" that was created with
 simple_index.go`
 
 var basePath = "store.position"
@@ -73,10 +74,13 @@ func main() {
 	}
 
 	fmt.Println("=================!!!=====================")
-	fmt.Printf("searchResults=%s\n", searchResults)
-	// fmt.Println("=================---=====================")
-	// fmt.Printf("searchResults.Fields=%s\n", searchResults.Fields)
-	fmt.Println("=================***=====================")
+	fmt.Printf("searchResults=%T\n", searchResults)
+	// fmt.Printf("searchResults=%s\n", searchResults)
+	// // fmt.Println("=================---=====================")
+	// // fmt.Printf("searchResults.Fields=%s\n", searchResults.Fields)
+	// fmt.Println("=================***=====================")
+	fmt.Printf("   getResults=%s\n", getResults(searchResults))
+	fmt.Println("=================+++=====================")
 	if len(searchResults.Hits) == 0 {
 		fmt.Println("No matches")
 		os.Exit(0)
@@ -202,6 +206,58 @@ func main() {
 	fmt.Println("=================@@@=====================")
 	fmt.Printf("term=%q\n", term)
 	fmt.Printf("indexPath=%q\n", indexPath)
+}
+
+func getResults(sr *bleve.SearchResult) string {
+	rv := ""
+	if sr.Total > 0 {
+		if sr.Request.Size > 0 {
+			rv = fmt.Sprintf("%d matches, showing %d through %d, took %s\n",
+				sr.Total, sr.Request.From+1, sr.Request.From+len(sr.Hits), sr.Took)
+			for i, hit := range sr.Hits {
+				rv += fmt.Sprintf("%5d. ", i+sr.Request.From+1)
+				rv += getHit(i, hit)
+				// rv += fmt.Sprintf("%5d. %s (%f)\n", i+sr.Request.From+1, hit.ID, hit.Score)
+				// for fragmentField, fragments := range hit.Fragments {
+				// 	rv += fmt.Sprintf("\t%s\n", fragmentField)
+				// 	for _, fragment := range fragments {
+				// 		rv += fmt.Sprintf("\t\t%s\n", fragment)
+				// 	}
+				// }
+				// for otherFieldName, otherFieldValue := range hit.Fields {
+				// 	if _, ok := hit.Fragments[otherFieldName]; !ok {
+				// 		rv += fmt.Sprintf("\t%s\n", otherFieldName)
+				// 		rv += fmt.Sprintf("\t\t%v\n", otherFieldValue)
+				// 	}
+				// }
+			}
+		} else {
+			rv = fmt.Sprintf("%d matches, took %s\n", sr.Total, sr.Took)
+		}
+	} else {
+		rv = "No matches"
+	}
+	return rv
+}
+
+func getHit(i int, hit *search.DocumentMatch) string {
+	// rv := fmt.Sprintf("%5d. %s (%f)\n", i+sr.Request.From+1, hit.ID, hit.Score)
+	rv := fmt.Sprintf(" [getHit:%d] %s (%f)\n", i, hit.ID, hit.Score)
+
+	for fragmentField, fragments := range hit.Fragments {
+		rv += fmt.Sprintf("\t[fragmentField] %s\n", fragmentField)
+		for _, fragment := range fragments {
+			rv += fmt.Sprintf("\t\t[fragment] %s\n", fragment)
+		}
+	}
+	for otherFieldName, otherFieldValue := range hit.Fields {
+		if _, ok := hit.Fragments[otherFieldName]; !ok {
+			rv += fmt.Sprintf("\t[otherFieldName] %s\n", otherFieldName)
+			rv += fmt.Sprintf("\t\t[otherFieldValue] %v\n", otherFieldValue)
+		}
+	}
+	rv += fmt.Sprintln("- - - - - - - - - - - - - - - - - - - - - - - -")
+	return rv
 }
 
 func getPosition(positions []serial.TextLocation, start, end uint32) serial.TextLocation {

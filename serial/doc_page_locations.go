@@ -166,7 +166,7 @@ func ReadDocPageLocations(buf []byte) (DocPageLocations, error) {
 		locs = append(locs, getTextLocation(&loc))
 	}
 
-	common.Log.Info("ReadDocPageLocations: Doc=%d Page=%d locs=%d", dpl.Doc(), dpl.Page(), len(locs))
+	common.Log.Debug("ReadDocPageLocations: Doc=%d Page=%d locs=%d", dpl.Doc(), dpl.Page(), len(locs))
 
 	return DocPageLocations{
 		dpl.Doc(),

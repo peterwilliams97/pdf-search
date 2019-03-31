@@ -12,21 +12,25 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar"
+	"github.com/unidoc/unidoc/common"
 )
 
 // PatternsToPaths returns a list of files matching the patterns in `patternList`.
 func PatternsToPaths(patternList []string, sortSize bool) ([]string, error) {
 	var pathList []string
-	for _, pattern := range patternList {
+	common.Log.Debug("patternList=%d", len(patternList))
+	for i, pattern := range patternList {
 		pattern = ExpandUser(pattern)
 		files, err := doublestar.Glob(pattern)
 		if err != nil {
-			fmt.Printf("PatternsToPaths: Glob failed. pattern=%#q err=%v\n", pattern, err)
+			common.Log.Error("PatternsToPaths: Glob failed. pattern=%#q err=%v", pattern, err)
+			panic(err)
 			return pathList, err
 		}
+		common.Log.Debug("patternList[%d]=%q %d matches", i, pattern, len(files))
 		for _, filename := range files {
 			if !RegularFile(filename) {
-				fmt.Printf("Not a regular file. %#q\n", filename)
+				common.Log.Info("Not a regular file. %#q", filename)
 				continue
 			}
 			pathList = append(pathList, filename)
@@ -36,9 +40,6 @@ func PatternsToPaths(patternList []string, sortSize bool) ([]string, error) {
 	if sortSize {
 		pathList = SortFileSize(pathList, -1, -1)
 	}
-	// if len(pathList) > 10 {
-	// 	pathList = pathList[:10]
-	// }
 	return pathList, nil
 }
 

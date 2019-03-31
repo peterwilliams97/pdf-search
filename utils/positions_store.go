@@ -72,6 +72,16 @@ type PositionsState struct {
 	updateTime time.Time         // Time of last Flush()
 }
 
+func (l PositionsState) String() string {
+	return fmt.Sprintf("{PositionsState: %q fileList=%d hashIndex=%d indexHash=%d "+
+		"hashPath=%d %s}",
+		l.root, len(l.fileList), len(l.hashIndex), len(l.indexHash), len(l.hashPath), l.updateTime)
+}
+
+func (l PositionsState) Len() int {
+	return len(l.fileList)
+}
+
 func (lState PositionsState) indexToPath(idx uint64) (string, bool) {
 	hash, ok := lState.indexHash[idx]
 	if !ok {
@@ -117,7 +127,7 @@ func OpenPositionsState(root string, forceCreate bool) (*PositionsState, error) 
 	lState.hashPath = hashPath
 	lState.updateTime = time.Now()
 
-	fmt.Fprintf(os.Stderr, "lState=%q %d\n", lState.root, len(lState.fileList))
+	fmt.Fprintf(os.Stderr, "lState=%s\n", lState)
 
 	return &lState, nil
 }
@@ -151,7 +161,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		var dpl serial.DocPageLocations
 		for i, loc := range locations {
 			stl := ToSerialTextLocation(loc)
-			common.Log.Info("%d: %s", i, stl)
+			common.Log.Debug("%d: %s", i, stl)
 			dpl.Locations = append(dpl.Locations, stl)
 		}
 
@@ -175,7 +185,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			common.Log.Info("\tpageNum=%d docPages=%d %q", pageNum, len(docPages), inPath)
 		}
 		dp := docPages[len(docPages)-1]
-		common.Log.Info("ExtractDocPagePositions: Doc=%d Page=%d locs=%d",
+		common.Log.Debug("ExtractDocPagePositions: Doc=%d Page=%d locs=%d",
 			dp.DocIdx, dp.PageIdx, len(dpl.Locations))
 
 		return nil
@@ -304,6 +314,23 @@ func (d DocPositions) String() string {
 	return fmt.Sprintf("DocPositions{%s}", strings.Join(parts, "\n"))
 }
 
+func (lState *PositionsState) ReadDocPageText(docIdx uint64, pageIdx uint32) (string, error) {
+
+	lDoc, err := lState.OpenPositionsDoc(docIdx)
+	if err != nil {
+		return "", err
+	}
+	defer lDoc.Close()
+	common.Log.Debug("ReadDocPageText: lDoc=%s", lDoc)
+
+	filename := lDoc.GetTextPath(pageIdx)
+	b, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
 func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32) (
 	string, uint32, serial.DocPageLocations, error) {
@@ -313,7 +340,7 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 		return "", 0, serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
-	common.Log.Info("lDoc=%s", lDoc)
+	common.Log.Debug("lDoc=%s", lDoc)
 	pageNum, dpl, err := lDoc.ReadPagePositions(pageIdx)
 	return lDoc.inPath, pageNum, dpl, err
 }
@@ -381,6 +408,10 @@ func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, er
 
 // baseFields populates a DocPositions with the fields that are the same for Open and Create.
 func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
+	if int(docIdx) >= len(lState.fileList) {
+		common.Log.Error("docIdx=%d lState=%s\n=%#v", docIdx, *lState, *lState)
+		panic(fmt.Errorf("docIdx=%d lState=%s", docIdx, *lState))
+	}
 	inPath := lState.fileList[docIdx].InPath
 	hash := lState.fileList[docIdx].Hash
 	locPath := lState.docPath(hash)
@@ -418,14 +449,14 @@ func (lDoc *DocPositions) Close() error {
 }
 
 func (lDoc *DocPositions) saveJsonDebug() error {
-	common.Log.Info("saveJsonDebug: pageDpl=%d pageDplPath=%q",
+	common.Log.Debug("saveJsonDebug: pageDpl=%d pageDplPath=%q",
 		len(lDoc.pageDpl), lDoc.pageDplPath)
 	var pageNums []int
 	for p := range lDoc.pageDpl {
 		pageNums = append(pageNums, p)
 	}
 	sort.Ints(pageNums)
-	common.Log.Info("saveJsonDebug: pageNums=%+v", pageNums)
+	common.Log.Debug("saveJsonDebug: pageNums=%+v", pageNums)
 	var data []byte
 	for _, p := range pageNums {
 		dpl := lDoc.pageDpl[p]
@@ -435,7 +466,7 @@ func (lDoc *DocPositions) saveJsonDebug() error {
 		if err != nil {
 			return err
 		}
-		common.Log.Info("saveJsonDebug: page %d: %d bytes", p, len(b))
+		common.Log.Debug("saveJsonDebug: page %d: %d bytes", p, len(b))
 		data = append(data, b...)
 		// panic("2")
 	}
@@ -480,7 +511,7 @@ func (lDoc *DocPositions) AddDocPage(pageNum int, dpl serial.DocPageLocations, t
 	// }
 	// fmt.Printf("text=%d %q\n", len(text), pref)
 
-	filename := filepath.Join(lDoc.textDir, fmt.Sprintf("%03d.txt", pageIdx))
+	filename := lDoc.GetTextPath(pageIdx)
 	err = ioutil.WriteFile(filename, []byte(text), 0644)
 	return pageIdx, err
 }
@@ -511,6 +542,10 @@ func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (uint32, serial.DocP
 	}
 	dpl, err := serial.ReadDocPageLocations(buf)
 	return e.PageNum, dpl, err
+}
+
+func (lDoc *DocPositions) GetTextPath(pageIdx uint32) string {
+	return filepath.Join(lDoc.textDir, fmt.Sprintf("%03d.txt", pageIdx))
 }
 
 // FileDesc describes a PDF file.

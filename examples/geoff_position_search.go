@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,20 +13,20 @@ import (
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/registry"
 	"github.com/blevesearch/bleve/search"
-	"github.com/blevesearch/bleve/search/highlight"
-	"github.com/peterwilliams97/pdf-search/serial"
 	"github.com/peterwilliams97/pdf-search/utils"
 	"github.com/unidoc/unidoc/common"
 )
 
-const usage = `Usage: go run location_search.go [OPTIONS] Adobe PDF
-Performs a full text search for "Adobe PDF" in Bleve index "store.location" that was created with
+const usage = `Usage: go run position_search.go [OPTIONS] Adobe PDF
+Performs a full text search for "Adobe PDF" in Bleve index "store.position" that was created with
 simple_index.go`
 
 var basePath = "store.position"
 
 func main() {
+	maxResults := 10
 	flag.StringVar(&basePath, "s", basePath, "Bleve store name. This is a directory.")
+	flag.IntVar(&maxResults, "n", maxResults, "Max number of results to return.")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
 	flag.Parse()
@@ -43,13 +42,8 @@ func main() {
 
 	term := strings.Join(flag.Args(), " ")
 	fmt.Printf("term=%q\n", term)
+	fmt.Printf("maxResults=%d\n", maxResults)
 	fmt.Printf("indexPath=%q\n", indexPath)
-
-	lState, err := utils.OpenPositionsState(basePath, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
-		panic(err)
-	}
 
 	// Open existing index.
 	index, err := bleve.Open(indexPath)
@@ -66,11 +60,22 @@ func main() {
 	search.Highlight = bleve.NewHighlight()
 	search.Fields = []string{"Text"}
 	search.Highlight.Fields = search.Fields
+	search.Size = maxResults
 	// search.Explain = true
 
 	searchResults, err := index.Search(search)
 	if err != nil {
 		panic(err)
+	}
+
+	lState, err := utils.OpenPositionsState(basePath, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", basePath, err)
+		panic(err)
+	}
+	if lState.Len() == 0 {
+		fmt.Fprintf(os.Stderr, "Empty positions store %s\n", lState)
+		panic("Empty positions store")
 	}
 
 	fmt.Println("=================!!!=====================")
@@ -79,157 +84,28 @@ func main() {
 	// // fmt.Println("=================---=====================")
 	// // fmt.Printf("searchResults.Fields=%s\n", searchResults.Fields)
 	// fmt.Println("=================***=====================")
-	fmt.Printf("   getResults=%s\n", getResults(searchResults))
+	fmt.Printf("   getResults=%s\n", getResults(lState, searchResults))
 	fmt.Println("=================+++=====================")
 	if len(searchResults.Hits) == 0 {
 		fmt.Println("No matches")
 		os.Exit(0)
 	}
 
-	// ~~~~
-	var highlighter highlight.Highlighter
-
-	if search.Highlight != nil {
-		// Get the right highlighter. Config.DefaultHighlighter
-		highlighter, err = bleve.Config.Cache.HighlighterNamed(bleve.Config.DefaultHighlighter)
-		if err != nil {
-			panic(err)
-		}
-		if search.Highlight.Style != nil {
-			highlighter, err = bleve.Config.Cache.HighlighterNamed(*search.Highlight.Style)
-			if err != nil {
-				panic(err)
-			}
-		}
-		if highlighter == nil {
-			panic(fmt.Errorf("no highlighter named `%s` registered", *search.Highlight.Style))
-		}
-	}
-	// !!!!
-
-	const maxPages = 20 // !@#$
-	extractions := utils.CreateExtractList(maxPages)
-	for i, hit := range searchResults.Hits {
-		if i >= maxPages {
-			common.Log.Info("Terminating after %d pages", maxPages)
-			break
-		}
-		id := hit.ID
-		text := hit.Fields["Text"].(string)
-		locations := hit.Locations
-		contents := locations["Text"]
-		// expl := hit.Expl
-
-		// doc, err := index.Document(id)
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		// termLocations, bestFragments, formattedFragments := highlighter.BestFragmentsInField2(hit, doc, "Text", 5)
-		// lens := make([]int, len(formattedFragments))
-		// for i, f := range formattedFragments {
-		// 	lens[i] = len(f)
-		// }
-		// fmt.Printf("##1 formattedFragments=%d %+v<<<<\n", len(formattedFragments), lens)
-		// fmt.Printf("##2 bestFragments=%d %T<<<<\n", len(bestFragments), bestFragments)
-		// for k, f := range bestFragments {
-		// 	fmt.Printf("\t%2d: %s\n\t%+q\n", k, *f, f.Snip(text))
-		// }
-		// fmt.Printf("##3 termLocations=%d %T<<<<\n", len(termLocations), termLocations)
-		// for k, f := range termLocations {
-		// 	fmt.Printf("\t%2d: %+v %+q\n", k, *f, f.Snip(text))
-		// }
-
-		fmt.Printf("===>>> %2d: id=%q hit=%T=%s %d fragments\n", i, id, hit, hit, len(hit.Fragments))
-		j := 0
-		for fragmentField, fragments := range hit.Fragments {
-			fmt.Printf("\t%2d: fragmentField=%q %d parts\n", j, fragmentField, len(fragments))
-			for k, fragment := range fragments {
-				fmt.Printf("\t\t%2d: %d %+q\n", k, len(fragment), fragment)
-			}
-			j++
-		}
-		// fmt.Printf("==@>>> expl=%s\n", expl)
-		// fmt.Println("--------------------------------------------")
-
-		docIdx, pageIdx, err := decodeID(id)
-		if err != nil {
-			panic(err)
-		}
-		inPath, pageNum, dpl, err := lState.ReadDocPagePositions(docIdx, pageIdx)
-		if err != nil {
-			panic(err)
-		}
-
-		positions := dpl.Locations
-
-		hash, inPath := lState.GetHashPath(docIdx)
-
-		common.Log.Info("--->>> %2d: pageNum=%d id=%q hit=%s Locations=%d text=%d positions=%d\n"+
-			"\t%#q %q",
-			i, pageNum, id, hit,
-			len(locations), len(text), len(positions),
-			hash, filepath.Base(inPath),
-		)
-
-		// for j, pos := range positions {
-		// 	fmt.Printf("%6d: %v\n", j, pos)
-		// }
-
-		k := 0
-		for term, termLocations := range contents {
-			fmt.Printf("--=+>> %6d: term=%q matches=%d\n", k, term, len(termLocations))
-			k++
-			for j, loc := range termLocations {
-				l := *loc
-				snip := text[l.Start:l.End]
-				pos := getPosition(positions, uint32(l.Start), uint32(l.End))
-				common.Log.Info("*~* %9d: %d [%d:%d] %q %v", j, l.Pos, l.Start, l.End, snip, pos)
-				extractions.AddRect(inPath, int(pageNum),
-					float64(pos.Llx), float64(pos.Lly), float64(pos.Urx), float64(pos.Ury))
-				bad := ""
-				if dx := float64(pos.Urx - pos.Llx); math.Abs(dx) > 200 {
-					bad += fmt.Sprintf("badX=%1.f", dx)
-				}
-				if dy := float64(pos.Ury - pos.Lly); math.Abs(dy) > 200 {
-					bad += fmt.Sprintf("badX=%1.f", dy)
-				}
-				if bad != "" {
-					common.Log.Error("$$$ bad: %s", bad)
-				}
-			}
-		}
-	}
-	if err := extractions.SaveOutputPdf("XXXXX.pdf"); err != nil {
-		panic(err)
-	}
 	fmt.Println("=================@@@=====================")
 	fmt.Printf("term=%q\n", term)
 	fmt.Printf("indexPath=%q\n", indexPath)
 }
 
-func getResults(sr *bleve.SearchResult) string {
+func getResults(lState *utils.PositionsState, sr *bleve.SearchResult) string {
 	rv := ""
 	if sr.Total > 0 {
 		if sr.Request.Size > 0 {
 			rv = fmt.Sprintf("%d matches, showing %d through %d, took %s\n",
 				sr.Total, sr.Request.From+1, sr.Request.From+len(sr.Hits), sr.Took)
 			for i, hit := range sr.Hits {
-				rv += fmt.Sprintf("%5d. ", i+sr.Request.From+1)
-				rv += getHit(i, hit)
-				// rv += fmt.Sprintf("%5d. %s (%f)\n", i+sr.Request.From+1, hit.ID, hit.Score)
-				// for fragmentField, fragments := range hit.Fragments {
-				// 	rv += fmt.Sprintf("\t%s\n", fragmentField)
-				// 	for _, fragment := range fragments {
-				// 		rv += fmt.Sprintf("\t\t%s\n", fragment)
-				// 	}
-				// }
-				// for otherFieldName, otherFieldValue := range hit.Fields {
-				// 	if _, ok := hit.Fragments[otherFieldName]; !ok {
-				// 		rv += fmt.Sprintf("\t%s\n", otherFieldName)
-				// 		rv += fmt.Sprintf("\t\t%v\n", otherFieldValue)
-				// 	}
-				// }
+				rv += "--------------------------------------------------\n"
+				rv += fmt.Sprintf("%d: ", i+sr.Request.From+1)
+				rv += getHit(lState, i, hit)
 			}
 		} else {
 			rv = fmt.Sprintf("%d matches, took %s\n", sr.Total, sr.Took)
@@ -240,64 +116,75 @@ func getResults(sr *bleve.SearchResult) string {
 	return rv
 }
 
-func getHit(i int, hit *search.DocumentMatch) string {
-	// rv := fmt.Sprintf("%5d. %s (%f)\n", i+sr.Request.From+1, hit.ID, hit.Score)
-	rv := fmt.Sprintf(" [getHit:%d] %s (%f)\n", i, hit.ID, hit.Score)
-
-	for fragmentField, fragments := range hit.Fragments {
-		rv += fmt.Sprintf("\t[fragmentField] %s\n", fragmentField)
-		for _, fragment := range fragments {
-			rv += fmt.Sprintf("\t\t[fragment] %s\n", fragment)
-		}
+func getHit(lState *utils.PositionsState, i int, hit *search.DocumentMatch) string {
+	m := getMatch(hit)
+	inPath, pageNum, _, err := lState.ReadDocPagePositions(m.docIdx, m.pageIdx)
+	if err != nil {
+		panic(err)
 	}
-	for otherFieldName, otherFieldValue := range hit.Fields {
-		if _, ok := hit.Fragments[otherFieldName]; !ok {
-			rv += fmt.Sprintf("\t[otherFieldName] %s\n", otherFieldName)
-			rv += fmt.Sprintf("\t\t[otherFieldValue] %v\n", otherFieldValue)
-		}
+	text, err := lState.ReadDocPageText(m.docIdx, m.pageIdx)
+	if err != nil {
+		panic(err)
 	}
-	rv += fmt.Sprintln("- - - - - - - - - - - - - - - - - - - - - - - -")
-	return rv
-}
-
-func getPosition(positions []serial.TextLocation, start, end uint32) serial.TextLocation {
-	i0, ok0 := getPositionIndex(positions, end)
-	i1, ok1 := getPositionIndex(positions, start)
-	if !(ok0 && ok1) {
-		return serial.TextLocation{}
-	}
-	p0, p1 := positions[i0], positions[i1]
-	return serial.TextLocation{
-		Start: start,
-		End:   end,
-		Llx:   min(p0.Llx, p1.Llx),
-		Lly:   min(p0.Lly, p1.Lly),
-		Urx:   max(p0.Urx, p1.Urx),
-		Ury:   max(p0.Ury, p1.Ury),
-	}
-}
-
-func getPositionIndex(positions []serial.TextLocation, offset uint32) (int, bool) {
-	i := sort.Search(len(positions), func(i int) bool { return positions[i].Start >= offset })
-	ok := 0 <= i && i < len(positions)
+	lineNumber, line, ok := getLineNumber(text, m.start)
 	if !ok {
-		common.Log.Error("getPositionIndex: offset=%d i=%d len=%d %v==%v", offset, i, len(positions),
-			positions[0], positions[len(positions)-1])
+		panic("No line number")
 	}
-	return i, ok
+	rv := fmt.Sprintf("path=%q pageNum=%d line=%d (score=%.3f) match=%q\n"+
+		"^^^^^^^^ Marked up Text ^^^^^^^^\n"+
+		"%s\n",
+		inPath, pageNum, lineNumber, m.score, line, m.fragment)
+
+	return fmt.Sprintf("%d: %s -- %s", i, hit.ID, rv)
 }
 
-func min(x, y float32) float32 {
-	if x < y {
-		return x
-	}
-	return y
+type match struct {
+	docIdx   uint64
+	pageIdx  uint32
+	score    float64
+	fragment string
+	start    int
+	end      int
 }
-func max(x, y float32) float32 {
-	if x > y {
-		return x
+
+func (m match) String() string {
+	return fmt.Sprintf("docIdx=%d pageIdx=%d (score=%.3f)\n%s", m.docIdx, m.pageIdx, m.score, m.fragment)
+}
+
+func getMatch(hit *search.DocumentMatch) match {
+
+	docIdx, pageIdx, err := decodeID(hit.ID)
+	if err != nil {
+		panic(err)
 	}
-	return y
+
+	start, end := -1, -1
+	frags := ""
+	common.Log.Debug("------------------------")
+	for k, fragments := range hit.Fragments {
+		for _, fragment := range fragments {
+			frags += fragment
+		}
+		loc := hit.Locations[k]
+		common.Log.Debug("%q: %v", k, frags)
+		for kk, v := range loc {
+			for i, l := range v {
+				common.Log.Debug("\t%q: %d: %#v", kk, i, l)
+				if start < 0 {
+					start = int(l.Start)
+					end = int(l.End)
+				}
+			}
+		}
+	}
+	return match{
+		docIdx:   docIdx,
+		pageIdx:  pageIdx,
+		score:    hit.Score,
+		fragment: frags,
+		start:    start,
+		end:      end,
+	}
 }
 
 // id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
@@ -314,6 +201,46 @@ func decodeID(id string) (uint64, uint32, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	fmt.Printf("$$$ %+q -> %+q %d.%d\n", id, parts, docIdx, pageIdx)
+	// fmt.Printf("$$$ %+q -> %+q %d.%d\n", id, parts, docIdx, pageIdx)
 	return uint64(docIdx), uint32(pageIdx), nil
+}
+
+func getLineNumber(text string, offset int) (int, string, bool) {
+	endings := lineEndings(text)
+	n := len(endings)
+	i := sort.Search(len(endings), func(i int) bool { return endings[i] > offset })
+	ok := 0 <= i && i < n
+	if !ok {
+		common.Log.Error("getLineNumber: offset=%d text=%d i=%d endings=%d %+v\n%s",
+			offset, len(text), i, n, endings, text)
+	}
+	common.Log.Debug("offset=%d i=%d endings=%+v", offset, i, endings)
+	ofs0 := endings[i-1]
+	ofs1 := endings[i+0]
+	line := text[ofs0:ofs1]
+	runes := []rune(line)
+	if len(runes) >= 1 && runes[0] == '\n' {
+		line = string(runes[1:])
+	}
+	return i, line, ok
+}
+
+func lineEndings(text string) []int {
+	if len(text) == 0 || (len(text) > 0 && text[len(text)-1] != '\n') {
+		text += "\n"
+	}
+	endings := []int{0}
+	for ofs := 0; ofs < len(text); {
+		o := strings.Index(text[ofs:], "\n")
+		if o < 0 {
+			break
+		}
+		endings = append(endings, ofs+o)
+		ofs = ofs + o + 1
+	}
+	// fmt.Println("==================================")
+	// fmt.Printf("%s\n", text)
+	// common.Log.Info("++++ text=%d endings=%d %+v", len(text), len(endings), endings)
+
+	return endings
 }
