@@ -31,10 +31,10 @@ type byteSpan struct {
 
 // DocPositions tracks the data that is used to index a PDF file.
 type DocPositions struct {
-	lState  *PositionsState                 // State of whole store.
-	inPath  string                          // Path of input PDF file.
-	docIdx  uint64                          // Index into lState.fileList.
-	pageDpl map[int]serial.DocPageLocations // !@#$ Debugging
+	lState  *PositionsState                    // State of whole store.
+	inPath  string                             // Path of input PDF file.
+	docIdx  uint64                             // Index into lState.fileList.
+	pageDpl map[uint32]serial.DocPageLocations // !@#$ Debugging
 	*docPersist
 	*docData
 }
@@ -52,7 +52,7 @@ type docPersist struct {
 // docData is the data for indexing a PDF file in memory.
 type docData struct {
 	// loc       serial.DocPageLocations
-	pageNums  []int
+	pageNums  []uint32
 	pageTexts []string
 }
 
@@ -147,11 +147,11 @@ func (lDoc *DocPositions) Close() error {
 func (lDoc *DocPositions) saveJsonDebug() error {
 	common.Log.Debug("saveJsonDebug: pageDpl=%d pageDplPath=%q",
 		len(lDoc.pageDpl), lDoc.pageDplPath)
-	var pageNums []int
+	var pageNums []uint32
 	for p := range lDoc.pageDpl {
-		pageNums = append(pageNums, p)
+		pageNums = append(pageNums, uint32(p))
 	}
-	sort.Ints(pageNums)
+	sort.Slice(pageNums, func(i, j int) bool { return pageNums[i] < pageNums[j] })
 	common.Log.Debug("saveJsonDebug: pageNums=%+v", pageNums)
 	var data []byte
 	for _, p := range pageNums {
@@ -172,7 +172,7 @@ func (lDoc *DocPositions) saveJsonDebug() error {
 
 // AddDocPage adds a page (with page number `pageNum` and contents `dpl`) to `lDoc`.
 // !@#$ Remove `text` param.
-func (lDoc *DocPositions) AddDocPage(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
+func (lDoc *DocPositions) AddDocPage(pageNum uint32, dpl serial.DocPageLocations, text string) (uint32, error) {
 	if pageNum == 0 {
 		panic("0000")
 	}
@@ -187,7 +187,7 @@ func (lDoc *DocPositions) AddDocPage(pageNum int, dpl serial.DocPageLocations, t
 
 }
 
-func (lDoc *DocPositions) addDocPagePersist(pageNum int, dpl serial.DocPageLocations, text string) (uint32, error) {
+func (lDoc *DocPositions) addDocPagePersist(pageNum uint32, dpl serial.DocPageLocations, text string) (uint32, error) {
 
 	b := flatbuffers.NewBuilder(0)
 	buf := serial.MakeDocPageLocations(b, dpl)
@@ -244,12 +244,17 @@ func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (uint32, serial.DocP
 	if !lDoc.isMem() {
 		return lDoc.readPersistedPagePositions(pageIdx)
 	}
+
 	if pageIdx >= uint32(len(lDoc.pageNums)) {
 		panic(fmt.Errorf("Bad pageIdx=%d lDoc=%s", pageIdx, lDoc))
 	}
+	common.Log.Debug("ReadPagePositions: pageIdx=%d pageNums=%v", pageIdx, lDoc.pageNums)
 	pageNum := lDoc.pageNums[pageIdx]
+	if pageNum == 0 {
+		panic(fmt.Errorf("No pageNum. lDoc=%s", lDoc))
+	}
 	dpl := lDoc.pageDpl[pageNum]
-	return 0, dpl, nil
+	return pageNum, dpl, nil
 }
 
 func (lDoc *DocPositions) readPersistedPagePositions(pageIdx uint32) (uint32, serial.DocPageLocations, error) {

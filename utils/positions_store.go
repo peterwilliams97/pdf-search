@@ -264,7 +264,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 			dpl.Locations = append(dpl.Locations, stl)
 		}
 
-		pageIdx, err := lDoc.AddDocPage(pageNum, dpl, text)
+		pageIdx, err := lDoc.AddDocPage(uint32(pageNum), dpl, text)
 		if err != nil {
 			panic(err)
 			return err
@@ -297,7 +297,9 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		panic(err)
 	}
 	if lState.isMem() {
+		common.Log.Info("pageNums=%v", lDoc.docData.pageNums)
 		lState.hashDoc[fd.Hash] = lDoc
+		// panic("1")
 	}
 	return docPages, err
 }
@@ -409,8 +411,8 @@ func (lState *PositionsState) ReadDocPagePositions(docIdx uint64, pageIdx uint32
 		return "", 0, serial.DocPageLocations{}, err
 	}
 	defer lDoc.Close()
-	common.Log.Debug("lDoc=%s", lDoc)
 	pageNum, dpl, err := lDoc.ReadPagePositions(pageIdx)
+	common.Log.Debug("docIdx=%d lDoc=%s pageNum=%d", docIdx, lDoc, pageNum)
 	return lDoc.inPath, pageNum, dpl, err
 }
 
@@ -461,7 +463,7 @@ func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, er
 	if lState.isMem() {
 		hash := lState.indexHash[docIdx]
 		lDoc := lState.hashDoc[hash]
-		common.Log.Info("OpenPositionsDoc(%d)->%s", docIdx, lDoc)
+		common.Log.Debug("OpenPositionsDoc(%d)->%s", docIdx, lDoc)
 		return lDoc, nil
 	}
 	lDoc := lState.baseFields(docIdx)
@@ -482,7 +484,7 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 		lState:  lState,
 		inPath:  inPath,
 		docIdx:  docIdx,
-		pageDpl: map[int]serial.DocPageLocations{},
+		pageDpl: map[uint32]serial.DocPageLocations{},
 	}
 
 	if !lState.isMem() {

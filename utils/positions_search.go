@@ -18,9 +18,9 @@ func SearchPdfIndex(persistDir, term string, maxResults int) (string, error) {
 
 	indexPath := filepath.Join(persistDir, "bleve")
 
-	common.Log.Info("term=%q", term)
-	common.Log.Info("maxResults=%d", maxResults)
-	common.Log.Info("indexPath=%q", indexPath)
+	common.Log.Debug("term=%q", term)
+	common.Log.Debug("maxResults=%d", maxResults)
+	common.Log.Debug("indexPath=%q", indexPath)
 
 	// Open existing index.
 	index, err := bleve.Open(indexPath)
@@ -40,9 +40,9 @@ func SearchPdfIndex(persistDir, term string, maxResults int) (string, error) {
 		return "", fmt.Errorf("Could not find term=%q %q. err=%v", term, persistDir, err)
 	}
 
-	common.Log.Info("=================@@@=====================")
-	common.Log.Info("term=%q", term)
-	common.Log.Info("indexPath=%q", indexPath)
+	common.Log.Debug("=================@@@=====================")
+	common.Log.Debug("term=%q", term)
+	common.Log.Debug("indexPath=%q", indexPath)
 	return results, nil
 }
 
