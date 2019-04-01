@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/peterwilliams97/pdf-search/utils"
 )
@@ -15,7 +16,7 @@ simple_index.go`
 
 func main() {
 	var filePath string
-	var inMemory bool
+	var inMemory = false
 	maxResults := 10
 	// utils.Debug = true // -d command line option doesn't work for this command line program !@#$
 
@@ -41,6 +42,7 @@ func main() {
 
 	// common.Log.Debug("doPersist=%t", doPersist)
 
+	t0 := time.Now()
 	if !inMemory {
 		persistDir := "yyy"
 		_, index, err := utils.IndexPdfs(pathList, persistDir, true, false)
@@ -62,7 +64,10 @@ func main() {
 			panic(err)
 		}
 	}
-
+	dt := time.Since(t0)
 	fmt.Println("=================+++=====================")
 	fmt.Printf("%s\n", results)
+	fmt.Println("=================xxx=====================")
+	fmt.Printf("Duration=%.1f sec (memory=%t)\n", dt.Seconds(), inMemory)
+
 }

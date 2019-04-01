@@ -100,13 +100,13 @@ func indexDocPagesLoc(index bleve.Index, lState *PositionsState, inPath string) 
 			return err
 		}
 		if i%100 == 0 {
-			fmt.Printf("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)\n",
+			common.Log.Info("\tIndexed %2d of %d pages in %5.1f sec (%.2f sec/page)",
 				i+1, len(docPages), dt.Seconds(), dt.Seconds()/float64(i+1))
-			fmt.Printf("\tid=%q text=%d\n", id, len(idText.Text))
+			common.Log.Info("\tid=%q text=%d", id, len(idText.Text))
 		}
 	}
 	dt := time.Since(t0)
-	fmt.Printf("\tIndexed %d pages in %.1f sec (%.3f sec/page)\n",
+	common.Log.Info("\tIndexed %d pages in %.1f sec (%.3f sec/page)\n",
 		len(docPages), dt.Seconds(), dt.Seconds()/float64(len(docPages)))
 	return nil
 }
@@ -154,12 +154,13 @@ const storeUpdatePeriodSec = 60.0
 
 // PositionsState is the global state of a writer or reader to the position indexes saved to disk.
 type PositionsState struct {
-	root       string            // Top level directory of the data saved to disk
-	fileList   []FileDesc        // List of file entries
-	hashIndex  map[string]uint64 // {file hash: index into fileList}
-	indexHash  map[uint64]string // {index into fileList: file hash}
-	hashPath   map[string]string // {file hash: file path}
-	updateTime time.Time         // Time of last Flush()
+	root       string                   // Top level directory of the data saved to disk
+	fileList   []FileDesc               // List of file entries
+	hashIndex  map[string]uint64        // {file hash: index into fileList}
+	indexHash  map[uint64]string        // {index into fileList: file hash}
+	hashPath   map[string]string        // {file hash: file path}
+	hashDoc    map[string]*DocPositions // {file hash: DocPositions}
+	updateTime time.Time                // Time of last Flush()
 }
 
 func (l PositionsState) String() string {
@@ -219,6 +220,8 @@ func OpenPositionsState(root string, forceCreate bool) (*PositionsState, error) 
 			lState.indexHash[uint64(i)] = hip.Hash
 			lState.hashPath[hip.Hash] = hip.InPath
 		}
+	} else {
+		lState.hashDoc = map[string]*DocPositions{}
 	}
 
 	lState.updateTime = time.Now()
@@ -292,6 +295,9 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 	err = lDoc.Close()
 	if err != nil {
 		panic(err)
+	}
+	if lState.isMem() {
+		lState.hashDoc[fd.Hash] = lDoc
 	}
 	return docPages, err
 }
@@ -391,13 +397,7 @@ func (lState *PositionsState) ReadDocPageText(docIdx uint64, pageIdx uint32) (st
 	}
 	defer lDoc.Close()
 	common.Log.Debug("ReadDocPageText: lDoc=%s", lDoc)
-
-	filename := lDoc.GetTextPath(pageIdx)
-	b, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return lDoc.ReadPageText(pageIdx)
 }
 
 // ReadDocPagePositions is inefficient. A DocPositions (a file) is opened and closed to read a page.
@@ -426,6 +426,9 @@ func (lState *PositionsState) CreatePositionsDoc(fd FileDesc) (*DocPositions, er
 		return nil, errors.New("duplicate PDF")
 	}
 	lDoc := lState.baseFields(docIdx)
+	if lState.isMem() != lDoc.isMem() {
+		panic(fmt.Errorf("lState.isMem()=%t lDoc.isMem()=%t", lState.isMem(), lDoc.isMem()))
+	}
 
 	if lState.isMem() {
 		return lDoc, nil
@@ -456,28 +459,14 @@ func (lState *PositionsState) GetHashPath(docIdx uint64) (hash, inPath string) {
 
 func (lState *PositionsState) OpenPositionsDoc(docIdx uint64) (*DocPositions, error) {
 	if lState.isMem() {
-		panic(fmt.Errorf("lState=%s", *lState))
+		hash := lState.indexHash[docIdx]
+		lDoc := lState.hashDoc[hash]
+		common.Log.Info("OpenPositionsDoc(%d)->%s", docIdx, lDoc)
+		return lDoc, nil
 	}
 	lDoc := lState.baseFields(docIdx)
-
-	f, err := os.Open(lDoc.dataPath)
-	if err != nil {
-		panic(err)
-		return nil, err
-	}
-	lDoc.dataFile = f
-
-	b, err := ioutil.ReadFile(lDoc.spansPath)
-	if err != nil {
-		return nil, err
-	}
-	var spans []byteSpan
-	if err := json.Unmarshal(b, &spans); err != nil {
-		return nil, err
-	}
-	lDoc.spans = spans
-
-	return lDoc, nil
+	err := lDoc.openDoc()
+	return lDoc, err
 }
 
 // baseFields populates a DocPositions with the fields that are the same for Open and Create.
@@ -490,18 +479,24 @@ func (lState *PositionsState) baseFields(docIdx uint64) *DocPositions {
 	hash := lState.fileList[docIdx].Hash
 
 	dp := DocPositions{
-		lState:     lState,
-		inPath:     inPath,
-		docIdx:     docIdx,
-		docPersist: &docPersist{pageDpl: map[int]serial.DocPageLocations{}},
+		lState:  lState,
+		inPath:  inPath,
+		docIdx:  docIdx,
+		pageDpl: map[int]serial.DocPageLocations{},
 	}
 
 	if !lState.isMem() {
 		locPath := lState.docPath(hash)
-		dp.dataPath = locPath + ".dat"
-		dp.spansPath = locPath + ".idx.json"
-		dp.textDir = locPath + ".pages"
-		dp.pageDplPath = locPath + ".dpl.json"
+		persist := docPersist{
+			dataPath:    locPath + ".dat",
+			spansPath:   locPath + ".idx.json",
+			textDir:     locPath + ".pages",
+			pageDplPath: locPath + ".dpl.json",
+		}
+		dp.docPersist = &persist
+	} else {
+		mem := docData{}
+		dp.docData = &mem
 	}
 	common.Log.Debug("baseFields: docIdx=%d dp=%+v", docIdx, dp)
 	return &dp
