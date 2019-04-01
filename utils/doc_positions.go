@@ -51,6 +51,7 @@ type docPersist struct {
 
 // docData is the data for indexing a PDF file in memory.
 type docData struct {
+	loc      serial.DocPageLocations
 	textList []string
 }
 
@@ -163,7 +164,7 @@ func (lDoc *DocPositions) ReadPagePositions(pageIdx uint32) (uint32, serial.DocP
 	if !lDoc.isMem() {
 		return lDoc.readPersistedPagePositions(pageIdx)
 	}
-	return 0, serial.DocPageLocations{}, nil
+	return 0, lDoc.docDat.loc, nil
 }
 
 func (lDoc *DocPositions) readPersistedPagePositions(pageIdx uint32) (uint32, serial.DocPageLocations, error) {
