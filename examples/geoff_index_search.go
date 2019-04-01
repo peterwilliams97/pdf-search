@@ -10,6 +10,14 @@ import (
 	"github.com/peterwilliams97/pdf-search/utils"
 )
 
+/*
+	go run geoff_index_search.go -p ~/testdata/adobe/PDF32000_2008.pdf  Type 1
+	Duration=72.4 sec (memory=false)
+
+	go run geoff_index_search.go -p ~/testdata/adobe/PDF32000_2008.pdf -m Type 1
+	Duration=22.7 sec (memory=true) 1 files [/Users/pcadmin/testdata/adobe/PDF32000_2008.pdf]
+*/
+
 const usage = `Usage: go run geoff_index_search.go [OPTIONS] Adobe PDF
 Performs a full text search for "Adobe PDF" in Bleve index "store.position" that was created with
 simple_index.go`
@@ -68,6 +76,7 @@ func main() {
 	fmt.Println("=================+++=====================")
 	fmt.Printf("%s\n", results)
 	fmt.Println("=================xxx=====================")
-	fmt.Printf("Duration=%.1f sec (memory=%t)\n", dt.Seconds(), inMemory)
+	fmt.Printf("Duration=%.1f sec (memory=%t) %d files %+v\n",
+		dt.Seconds(), inMemory, len(pathList), pathList)
 
 }

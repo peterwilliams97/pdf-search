@@ -52,10 +52,10 @@ func SetLogging() {
 	} else {
 		common.SetLogger(common.NewConsoleLogger(common.LogLevelInfo))
 	}
-	common.Log.Error("Error")
+	// common.Log.Error("Error")
 	common.Log.Info("ShowHelp=%t Debug=%t Trace=%t", ShowHelp, Debug, Trace)
-	common.Log.Debug("Debug")
-	common.Log.Trace("Trace")
+	// common.Log.Debug("Debug")
+	// common.Log.Trace("Trace")
 }
 
 // PdfOpen opens PDF file `inPath` and attempts to handle null encryption schemes.
