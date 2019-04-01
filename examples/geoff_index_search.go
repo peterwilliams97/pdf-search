@@ -15,10 +15,12 @@ simple_index.go`
 
 func main() {
 	var filePath string
+	var inMemory bool
 	maxResults := 10
 	// utils.Debug = true // -d command line option doesn't work for this command line program !@#$
 
 	flag.StringVar(&filePath, "p", filePath, "PDF file to index.")
+	flag.BoolVar(&inMemory, "m", inMemory, "In-memory store.")
 	flag.IntVar(&maxResults, "n", maxResults, "Max number of results to return.")
 	utils.MakeUsage(usage)
 	utils.SetLogging()
@@ -36,11 +38,10 @@ func main() {
 	pathList := []string{filePath}
 	term := strings.Join(flag.Args(), " ")
 	var results string
-	const doPersist = true
 
 	// common.Log.Debug("doPersist=%t", doPersist)
 
-	if doPersist {
+	if !inMemory {
 		persistDir := "yyy"
 		_, index, err := utils.IndexPdfs(pathList, persistDir, true, false)
 		if err != nil {
