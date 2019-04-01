@@ -26,12 +26,12 @@ type FileDesc struct {
 // IndexPdfs creates a bleve+PositionsState index for `pathList`. If `persistDir` is not empty, the
 // index is written to this directory.
 func IndexPdfs(pathList []string, persistDir string, forceCreate, allowAppend bool) (
-	*PositionsState, bleve.Index, error) {
+	*PositionsState, bleve.Index, int, error) {
 	fmt.Fprintf(os.Stderr, "Indexing %d PDF files.\n", len(pathList))
 
 	lState, err := OpenPositionsState(persistDir, forceCreate)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Could not create positions store %q. err=%v", persistDir, err)
+		return nil, nil, 0, fmt.Errorf("Could not create positions store %q. err=%v", persistDir, err)
 	}
 	defer lState.Flush()
 
@@ -39,7 +39,7 @@ func IndexPdfs(pathList []string, persistDir string, forceCreate, allowAppend bo
 	if len(persistDir) == 0 {
 		index, err = CreateBleveMemIndex()
 		if err != nil {
-			return nil, nil, fmt.Errorf("Could not create Bleve memoryindex. err=%v", err)
+			return nil, nil, 0, fmt.Errorf("Could not create Bleve memoryindex. err=%v", err)
 		}
 	} else {
 		indexPath := filepath.Join(persistDir, "bleve")
@@ -47,24 +47,26 @@ func IndexPdfs(pathList []string, persistDir string, forceCreate, allowAppend bo
 		// Create a new Bleve index.
 		index, err = CreateBleveIndex(indexPath, forceCreate, allowAppend)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Could not create Bleve index in %q", indexPath)
+			return nil, nil, 0, fmt.Errorf("Could not create Bleve index in %q", indexPath)
 		}
 	}
 
+	totalPages := 0
 	// Add the pages of all the PDFs in `pathList` to `index`.
 	for i, inPath := range pathList {
 		fmt.Fprintf(os.Stderr, ">> %3d of %d: %q\n", i+1, len(pathList), inPath)
 		err := indexDocPagesLoc(index, lState, inPath)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Could not index file %q", inPath)
+			return nil, nil, 0, fmt.Errorf("Could not index file %q", inPath)
 		}
 		docCount, err := index.DocCount()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		common.Log.Info("Indexed %q. Total %d pages indexed.", inPath, docCount)
+		totalPages += int(docCount)
 	}
-	return lState, index, nil
+	return lState, index, totalPages, nil
 }
 
 type IDText struct {
@@ -297,9 +299,8 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 		panic(err)
 	}
 	if lState.isMem() {
-		common.Log.Info("pageNums=%v", lDoc.docData.pageNums)
+		common.Log.Debug("ExtractDocPagePositions: pageNums=%v", lDoc.docData.pageNums)
 		lState.hashDoc[fd.Hash] = lDoc
-		// panic("1")
 	}
 	return docPages, err
 }
