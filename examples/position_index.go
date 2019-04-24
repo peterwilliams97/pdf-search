@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/peterwilliams97/pdf-search/doclib"
 )
 
 const usage = `Usage: go run position_index.go [OPTIONS] PDF32000_2008.pdf
@@ -20,30 +20,26 @@ func main() {
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
 
-	utils.MakeUsage(usage)
+	doclib.MakeUsage(usage)
 	flag.Parse()
-	utils.SetLogging()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	// Read the list of PDF files that will be processed.
-	pathList, err := utils.PatternsToPaths(flag.Args(), true)
+	pathList, err := doclib.PatternsToPaths(flag.Args(), true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "Total of %d PDF files.\n", len(pathList))
-	pathList = utils.CleanCorpus(pathList)
+	pathList = doclib.CleanCorpus(pathList)
 	if len(pathList) > 5860 { // !@#$
 		pathList = pathList[5860:]
 	}
-	lState, index, err := utils.IndexPdfs(pathList, persistDir, forceCreate, allowAppend)
+	lState, index, err := doclib.IndexPdfs(pathList, persistDir, forceCreate, allowAppend)
 	if err != nil {
 		panic(err)
 	}

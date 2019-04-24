@@ -1,4 +1,4 @@
-package utils
+package doclib
 
 import (
 	"fmt"
@@ -68,7 +68,7 @@ func ExtractDocPages(inPath string) ([]PdfPage, error) {
 
 	var docPages []PdfPage
 
-	return docPages, ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return docPages, ProcessPDFPagesFile(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, err := ExtractPageText(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
@@ -94,7 +94,7 @@ func ExtractDocPages(inPath string) ([]PdfPage, error) {
 // ExtractDocPagesChan uses UniDoc to extract the text from all pages in PDF file `inPath`.
 // It sends the non-empty pages it successfully extracts to channel `docPages`.
 // It returns the page numbers of these pages so that a caller can know pages to check for
-// completion in the channe's receiver.
+// completion in the channel's receiver.
 func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) {
 
 	hash, err := FileHash(inPath)
@@ -104,7 +104,7 @@ func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) 
 
 	var pagesDone []int
 
-	return pagesDone, ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return pagesDone, ProcessPDFPagesFile(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, err := ExtractPageText(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
@@ -128,6 +128,7 @@ func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) 
 	})
 }
 
+// ExtractDocPagesLookup extracts pages from PDF including text positions.
 func ExtractDocPagesLookup(inPath string) ([]LocPage, error) {
 
 	hash, err := FileHash(inPath)
@@ -137,7 +138,7 @@ func ExtractDocPagesLookup(inPath string) ([]LocPage, error) {
 
 	var docPages []LocPage
 
-	return docPages, ProcessPDFPages(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return docPages, ProcessPDFPagesFile(inPath, func(pageNum int, page *pdf.PdfPage) error {
 		text, locations, err := ExtractPageTextLocation(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPagesLookup: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",

@@ -1,69 +1,13 @@
 package serial
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/crc32"
-	"os"
 
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/peterwilliams97/pdf-search/serial/locations"
 	"github.com/unidoc/unidoc/common"
 )
-
-func WriteDocPageLocations(f *os.File, dpl DocPageLocations) error {
-	b := flatbuffers.NewBuilder(0)
-	buf := MakeDocPageLocations(b, dpl)
-	check := crc32.ChecksumIEEE(buf) // uint32
-	size := uint64(len(buf))
-	if err := binary.Write(f, binary.LittleEndian, size); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.LittleEndian, check); err != nil {
-		return err
-	}
-	_, err := f.Write(buf)
-	return err
-}
-
-func RReadDocPageLocations(f *os.File) (DocPageLocations, error) {
-	var size uint64
-	var check uint32
-	if err := binary.Read(f, binary.LittleEndian, &size); err != nil {
-		return DocPageLocations{}, err
-	}
-	if err := binary.Read(f, binary.LittleEndian, &check); err != nil {
-		return DocPageLocations{}, err
-	}
-	buf := make([]byte, size)
-	if _, err := f.Read(buf); err != nil {
-		return DocPageLocations{}, err
-	}
-	if crc32.ChecksumIEEE(buf) != check {
-		panic(errors.New("bad checksum"))
-		return DocPageLocations{}, errors.New("bad checksum")
-	}
-	return ReadDocPageLocations(buf)
-}
-
-// table TextLocation {
-// 	offset:   uint32;
-// 	llx: float32;
-// 	lly: float32;
-// 	urx: float32;
-// 	ury: float32;
-// }
-type TextLocation struct {
-	Start, End         uint32
-	Llx, Lly, Urx, Ury float32
-}
-
-func (t TextLocation) String() string {
-	return fmt.Sprintf("{TextLocation: %d:%d (%5.1f, %5.1f) (%5.1f, %5.1f)",
-		t.Start, t.End,
-		t.Llx, t.Lly, t.Urx, t.Ury)
-}
 
 // table DocPageLocations  {
 // 	doc:       uint64;
@@ -76,49 +20,40 @@ type DocPageLocations struct {
 	Locations []TextLocation
 }
 
-func MakeTextLocation(b *flatbuffers.Builder, loc TextLocation) []byte {
-	// Re-use the already-allocated Builder.
-	b.Reset()
+// func WriteDocPageLocations(f *os.File, dpl DocPageLocations) error {
+// 	b := flatbuffers.NewBuilder(0)
+// 	buf := MakeDocPageLocations(b, dpl)
+// 	check := crc32.ChecksumIEEE(buf) // uint32
+// 	size := uint64(len(buf))
+// 	if err := binary.Write(f, binary.LittleEndian, size); err != nil {
+// 		return err
+// 	}
+// 	if err := binary.Write(f, binary.LittleEndian, check); err != nil {
+// 		return err
+// 	}
+// 	_, err := f.Write(buf)
+// 	return err
+// }
 
-	// Write the TextLocation object.
-	locOffset := addTextLocation(b, loc)
-
-	// Finish the write operations by our TextLocation the root object.
-	b.Finish(locOffset)
-
-	// Return the byte slice containing encoded data.
-	return b.Bytes[b.Head():]
-}
-
-// addTextLocation writes `loc` to builder `b`.
-func addTextLocation(b *flatbuffers.Builder, loc TextLocation) flatbuffers.UOffsetT {
-	// Write the TextLocation object.
-	locations.TextLocationStart(b)
-	locations.TextLocationAddOffset(b, loc.Start)
-	locations.TextLocationAddLlx(b, loc.Llx)
-	locations.TextLocationAddLly(b, loc.Lly)
-	locations.TextLocationAddUrx(b, loc.Urx)
-	locations.TextLocationAddUry(b, loc.Ury)
-	return locations.TextLocationEnd(b)
-}
-
-func ReadTextLocation(buf []byte) TextLocation {
-	// Initialize a TextLocation reader from `buf`.
-	loc := locations.GetRootAsTextLocation(buf, 0)
-	return getTextLocation(loc)
-}
-
-func getTextLocation(loc *locations.TextLocation) TextLocation {
-	// Copy the TextLocation's fields (since these are numbers).
-	return TextLocation{
-		loc.Offset(),
-		0,
-		loc.Llx(),
-		loc.Lly(),
-		loc.Urx(),
-		loc.Ury(),
-	}
-}
+// func RReadDocPageLocations(f *os.File) (DocPageLocations, error) {
+// 	var size uint64
+// 	var check uint32
+// 	if err := binary.Read(f, binary.LittleEndian, &size); err != nil {
+// 		return DocPageLocations{}, err
+// 	}
+// 	if err := binary.Read(f, binary.LittleEndian, &check); err != nil {
+// 		return DocPageLocations{}, err
+// 	}
+// 	buf := make([]byte, size)
+// 	if _, err := f.Read(buf); err != nil {
+// 		return DocPageLocations{}, err
+// 	}
+// 	if crc32.ChecksumIEEE(buf) != check {
+// 		panic(errors.New("bad checksum"))
+// 		return DocPageLocations{}, errors.New("bad checksum")
+// 	}
+// 	return ReadDocPageLocations(buf)
+// }
 
 func MakeDocPageLocations(b *flatbuffers.Builder, dpl DocPageLocations) []byte {
 	b.Reset()
@@ -173,4 +108,67 @@ func ReadDocPageLocations(buf []byte) (DocPageLocations, error) {
 		dpl.Page(),
 		locs,
 	}, nil
+}
+
+// table TextLocation {
+// 	offset:   uint32;
+// 	llx: float32;
+// 	lly: float32;
+// 	urx: float32;
+// 	ury: float32;
+// }
+// TextLocation describes the location of text on a page.
+type TextLocation struct {
+	Start, End         uint32
+	Llx, Lly, Urx, Ury float32
+}
+
+func (t TextLocation) String() string {
+	return fmt.Sprintf("{TextLocation: %d:%d (%5.1f, %5.1f) (%5.1f, %5.1f)",
+		t.Start, t.End,
+		t.Llx, t.Lly, t.Urx, t.Ury)
+}
+
+func MakeTextLocation(b *flatbuffers.Builder, loc TextLocation) []byte {
+	// Re-use the already-allocated Builder.
+	b.Reset()
+
+	// Write the TextLocation object.
+	locOffset := addTextLocation(b, loc)
+
+	// Finish the write operations by our TextLocation the root object.
+	b.Finish(locOffset)
+
+	// Return the byte slice containing encoded data.
+	return b.Bytes[b.Head():]
+}
+
+// addTextLocation writes `loc` to builder `b`.
+func addTextLocation(b *flatbuffers.Builder, loc TextLocation) flatbuffers.UOffsetT {
+	// Write the TextLocation object.
+	locations.TextLocationStart(b)
+	locations.TextLocationAddOffset(b, loc.Start)
+	locations.TextLocationAddLlx(b, loc.Llx)
+	locations.TextLocationAddLly(b, loc.Lly)
+	locations.TextLocationAddUrx(b, loc.Urx)
+	locations.TextLocationAddUry(b, loc.Ury)
+	return locations.TextLocationEnd(b)
+}
+
+func ReadTextLocation(buf []byte) TextLocation {
+	// Initialize a TextLocation reader from `buf`.
+	loc := locations.GetRootAsTextLocation(buf, 0)
+	return getTextLocation(loc)
+}
+
+func getTextLocation(loc *locations.TextLocation) TextLocation {
+	// Copy the TextLocation's fields (since these are numbers).
+	return TextLocation{
+		loc.Offset(),
+		0,
+		loc.Llx(),
+		loc.Lly(),
+		loc.Urx(),
+		loc.Ury(),
+	}
 }

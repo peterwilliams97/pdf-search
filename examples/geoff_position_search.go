@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/peterwilliams97/pdf-search/doclib"
 	"github.com/unidoc/unidoc/common"
 )
 
@@ -19,13 +19,9 @@ func main() {
 	maxResults := 10
 	flag.StringVar(&persistDir, "s", persistDir, "Bleve store name. This is a directory.")
 	flag.IntVar(&maxResults, "n", maxResults, "Max number of results to return.")
-	utils.MakeUsage(usage)
-	utils.SetLogging()
+	doclib.MakeUsage(usage)
 	flag.Parse()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)
@@ -33,7 +29,7 @@ func main() {
 
 	term := strings.Join(flag.Args(), " ")
 
-	results, err := utils.SearchPdfIndex(persistDir, term, maxResults)
+	results, err := doclib.SearchPdfIndex(persistDir, term, maxResults)
 	if err != nil {
 		panic(err)
 	}

@@ -1,9 +1,10 @@
-package utils
+package doclib
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -24,12 +25,16 @@ func PatternsToPaths(patternList []string, sortSize bool) ([]string, error) {
 		files, err := doublestar.Glob(pattern)
 		if err != nil {
 			common.Log.Error("PatternsToPaths: Glob failed. pattern=%#q err=%v", pattern, err)
-			panic(err)
 			return pathList, err
 		}
 		common.Log.Debug("patternList[%d]=%q %d matches", i, pattern, len(files))
 		for _, filename := range files {
-			if !RegularFile(filename) {
+			ok, err := RegularFile(filename)
+			if err != nil {
+				common.Log.Error("PatternsToPaths: RegularFile failed. pattern=%#q err=%v", pattern, err)
+				return pathList, err
+			}
+			if !ok {
 				common.Log.Info("Not a regular file. %#q", filename)
 				continue
 			}
@@ -38,7 +43,11 @@ func PatternsToPaths(patternList []string, sortSize bool) ([]string, error) {
 	}
 	pathList = StringUniques(pathList)
 	if sortSize {
-		pathList = SortFileSize(pathList, -1, -1)
+		pathList, err := SortFileSize(pathList, -1, -1)
+		if err != nil {
+			common.Log.Error("PatternsToPaths: SortFileSize failed. err=%v", err)
+			return pathList, err
+		}
 	}
 	return pathList, nil
 }
@@ -140,33 +149,33 @@ func ExpandUser(filename string) string {
 }
 
 // RegularFile returns true if file `filename` is a regular file.
-func RegularFile(filename string) bool {
+func RegularFile(filename string) (bool, error) {
 	fi, err := os.Stat(filename)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
-	return fi.Mode().IsRegular()
+	return fi.Mode().IsRegular(), nil
 }
 
 // FileSize returns the size of file `filename` in bytes.
-func FileSize(filename string) int64 {
+func FileSize(filename string) (int64, error) {
 	fi, err := os.Stat(filename)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
-	return fi.Size()
+	return fi.Size(), nil
 }
 
 // SortFileSize returns the paths of the files in `pathList` sorted by ascending size.
 // If `minSize` >= 0 then only files of this size or larger are returned.
 // If `maxSize` >= 0 then only files of this size or smaller are returned.
-func SortFileSize(pathList []string, minSize, maxSize int64) []string {
+func SortFileSize(pathList []string, minSize, maxSize int64) ([]string, error) {
 	n := len(pathList)
 	fdList := make([]fileInfo, n)
 	for i, filename := range pathList {
 		fi, err := os.Stat(filename)
 		if err != nil {
-			panic(err)
+			return []string{}, err
 		}
 		fdList[i].filename = filename
 		fdList[i].FileInfo = fi
@@ -194,7 +203,7 @@ func SortFileSize(pathList []string, minSize, maxSize int64) []string {
 	for i, fd := range fdList {
 		outList[i] = fd.filename
 	}
-	return outList
+	return outList, nil
 }
 
 type fileInfo struct {
@@ -216,7 +225,42 @@ func FileHash(filename string) (string, error) {
 	if FileHashSize > 0 && FileHashSize < len(digest) {
 		digest = digest[:FileHashSize]
 	}
+	// rs, err := os.Open(filename)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// _, digest2, err := ReaderSizeHash(rs)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// if digest2 != digest {
+	// 	panic("seek")
+	// }
 	return digest, nil
+}
+
+func ReaderSizeHash(rs io.ReadSeeker) (int64, string, error) {
+	numBytes, err := rs.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, "", err
+	}
+	b := make([]byte, numBytes)
+	_, err = rs.Seek(0, io.SeekStart)
+	if err != nil {
+		return 0, "", err
+	}
+	_, err = rs.Read(b)
+	if err != nil {
+		return 0, "", err
+	}
+
+	hasher := sha256.New()
+	hasher.Write(b)
+	digest := hex.EncodeToString(hasher.Sum(nil))
+	if FileHashSize > 0 && FileHashSize < len(digest) {
+		digest = digest[:FileHashSize]
+	}
+	return numBytes, digest, nil
 }
 
 // Reverse returns `arr` in reverse order.

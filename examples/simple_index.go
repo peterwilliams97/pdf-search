@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/blevesearch/bleve"
-	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/peterwilliams97/pdf-search/doclib"
 )
 
 const usage = `Usage: go run simple_index.go [OPTIONS] PDF32000_2008.pdf
@@ -22,13 +22,9 @@ func main() {
 	flag.BoolVar(&forceCreate, "f", false, "Force creation of a new Bleve index.")
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
 
-	utils.MakeUsage(usage)
+	doclib.MakeUsage(usage)
 	flag.Parse()
-	utils.SetLogging()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)
@@ -38,16 +34,16 @@ func main() {
 	fmt.Printf("indexPath=%q\n", indexPath)
 
 	// Read the list of PDF files that will be processed.
-	pathList, err := utils.PatternsToPaths(flag.Args(), true)
+	pathList, err := doclib.PatternsToPaths(flag.Args(), true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
 		os.Exit(1)
 	}
-	pathList = utils.CleanCorpus(pathList)
+	pathList = doclib.CleanCorpus(pathList)
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
 	// Create a new Bleve index.
-	index, err := utils.CreateBleveIndex(indexPath, forceCreate, allowAppend)
+	index, err := doclib.CreateBleveIndex(indexPath, forceCreate, allowAppend)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", indexPath)
 		panic(err)
@@ -71,7 +67,7 @@ func main() {
 
 // indexDocPages adds the text of all the pages in PDF file `inPath` to Bleve index `index`.
 func indexDocPages(index bleve.Index, inPath string) error {
-	docPages, err := utils.ExtractDocPages(inPath)
+	docPages, err := doclib.ExtractDocPages(inPath)
 	if err != nil {
 		fmt.Printf("indexDocPages: Couldn't extract pages from %q err=%v\n", inPath, err)
 		return nil

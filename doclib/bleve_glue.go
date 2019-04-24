@@ -1,15 +1,20 @@
-package utils
+package doclib
 
 import (
+	"bytes"
 	"path/filepath"
 
 	"github.com/blevesearch/bleve"
+	btreap "github.com/blevesearch/bleve/index/store/gtreap"
+	"github.com/blevesearch/blevex/preload"
 	"github.com/unidoc/unidoc/common"
 )
 
 // CreateBleveIndex creates a new persistent Bleve index at `indexPath`.
 // If `forceCreate` is true then an existing index will be deleted.
 // If `allowAppend` is true then an existing index will be appended to.
+// TODO: Remove `allowAppend` argument. Instead always append to an existing index if
+//      `forceCreate` is false.
 func CreateBleveIndex(indexPath string, forceCreate, allowAppend bool) (bleve.Index, error) {
 	// Create a new index.
 	mapping := bleve.NewIndexMapping()
@@ -47,4 +52,45 @@ func removeIndex(indexPath string) {
 	if err := RemoveDirectory(indexPath); err != nil {
 		common.Log.Error("RemoveDirectory(%q) failed. err=%v", indexPath, err)
 	}
+}
+
+func TestRoundtripMem(index bleve.Index) bleve.Index {
+	data, err := ExportBleveMem(index)
+	if err != nil {
+		panic(err)
+	}
+	index2, err := ImportBleveMem(data)
+	if err != nil {
+		panic(err)
+	}
+	common.Log.Info("!!!! data=%d", len(data))
+	return index2
+}
+
+func ExportBleveMem(index bleve.Index) ([]byte, error) {
+	var b bytes.Buffer
+	w := &b
+	i, _, err := index.Advanced()
+	if err != nil {
+		return nil, err
+	}
+	if err = preload.ExportBleve(i, w); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func ImportBleveMem(data []byte) (bleve.Index, error) {
+
+	index, err := bleve.NewUsing(
+		"",
+		bleve.NewIndexMapping(),
+		bleve.Config.DefaultIndexType,
+		preload.Name,
+		map[string]interface{}{
+			"kvStoreName_actual": btreap.Name,
+			"preloadmem":         data,
+		})
+
+	return index, err
 }

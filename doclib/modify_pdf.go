@@ -1,14 +1,13 @@
-package utils
+package doclib
 
 import (
+	"errors"
 	"fmt"
-	"math"
 	"path/filepath"
 	"strings"
 
 	"github.com/unidoc/unidoc/common"
 	"github.com/unidoc/unidoc/pdf/creator"
-	"github.com/unidoc/unidoc/pdf/extractor"
 	pdf "github.com/unidoc/unidoc/pdf/model"
 )
 
@@ -17,7 +16,7 @@ type ExtractList struct {
 	maxPages  int
 	sources   []Extract // Source pages in order they will be combined
 	sourceSet map[string]bool
-	contents  map[string]map[int]pageContent // Pages for each document
+	contents  map[string]map[uint32]pageContent // Pages for each document
 	// documentIndex map[string]int
 }
 
@@ -31,7 +30,7 @@ func (l ExtractList) String() string {
 
 type Extract struct {
 	inPath  string // Path of PDF that page comes from.
-	pageNum int    // Page number (1-offset) of page in source document
+	pageNum uint32 // Page number (1-offset) of page in source document
 }
 
 type pageContent struct {
@@ -45,7 +44,8 @@ type pageContent struct {
 // 	pages    []*pdf.PdfPage // pages
 // }
 
-func (l *ExtractList) AddRect(inPath string, pageNum int, llx, lly, urx, ury float64) {
+func (l *ExtractList) AddRect(inPath string, pageNum uint32, llx, lly, urx, ury float32) {
+	common.Log.Info("AddRect %q %3d {%.1f %.1f %.1f %.1f}", filepath.Base(inPath), pageNum, llx, lly, urx, ury)
 	pathPage := fmt.Sprintf("%s.%d", inPath, pageNum)
 	if !l.sourceSet[pathPage] {
 		if len(l.sourceSet) >= l.maxPages {
@@ -54,19 +54,19 @@ func (l *ExtractList) AddRect(inPath string, pageNum int, llx, lly, urx, ury flo
 		}
 		l.sourceSet[pathPage] = true
 		l.sources = append(l.sources, Extract{inPath, pageNum})
-		common.Log.Info("AddRect: %q:%d len=%d", inPath, pageNum, len(l.sourceSet))
+		common.Log.Info("AddRect: %q:%d len=%d", filepath.Base(inPath), pageNum, len(l.sourceSet))
 	}
 
 	docContent, ok := l.contents[inPath]
 	if !ok {
-		docContent = map[int]pageContent{}
+		docContent = map[uint32]pageContent{}
 		l.contents[inPath] = docContent
 	}
 	pageContent := docContent[pageNum]
 	if len(pageContent.rects) >= 3 {
 		return
 	}
-	r := pdf.PdfRectangle{llx, lly, urx, ury}
+	r := pdf.PdfRectangle{float64(llx), float64(lly), float64(urx), float64(ury)}
 	pageContent.rects = append(pageContent.rects, r)
 	if pageNum == 0 {
 		common.Log.Error("inPath=%q pageNum=%d", inPath, pageNum)
@@ -78,7 +78,7 @@ func (l *ExtractList) AddRect(inPath string, pageNum int, llx, lly, urx, ury flo
 func CreateExtractList(maxPages int) *ExtractList {
 	return &ExtractList{
 		maxPages:  maxPages,
-		contents:  map[string]map[int]pageContent{},
+		contents:  map[string]map[uint32]pageContent{},
 		sourceSet: map[string]bool{},
 	}
 }
@@ -87,34 +87,27 @@ func (l *ExtractList) NumPages() int {
 	return len(l.sources)
 }
 
-// func (l *ExtractList) AddPage(inPath string, pageNum int) {
-// 	// idx, ok := l.documentIndex[inPath]
-// 	// if !ok {
-// 	// 	idx = len(l.documentIndex)
-// 	// 	l.documentIndex[inPath] = idx
-// 	// 	// l.docPages[inPath] = []
-// 	// }
-// 	l.sources = append(l.sources, Extract{inPath, pageNum})
-// 	l.docPages[inPath].pageNums = append(l.docPages[inPath].pageNums, pageNum)
-// }
+const BorderWidth = 3.0               // !@#$ For testing.
+const ShadowWidth = BorderWidth + 0.5 // !@#$ For testing.
 
-// SaveOutputPdf is called by position_search.go
+// SaveOutputPdf is called by position_search.go to markup a PDF file with the locations of
+// text.
+// `l` contains the input PDF names and the pages and coordinates to mark.
+// The resulting PDF is written to `outPath`.
 func (l *ExtractList) SaveOutputPdf(outPath string) error {
 	common.Log.Info("l=%s", *l)
 	for inPath, docContents := range l.contents {
-		pdfReader, err := PdfOpen(inPath)
+		pdfReader, err := PdfOpenFile(inPath, false)
 		if err != nil {
 			common.Log.Error("SaveOutputPdf: Could not open inPath=%q. err=%v", inPath, err)
-			panic(err)
 			return err
 		}
 		for pageNum := range docContents {
-			page, err := pdfReader.GetPage(pageNum)
+			common.Log.Info("@!@# %q", inPath, pageNum)
+			page, err := pdfReader.GetPage(int(pageNum))
 			if err != nil {
 				common.Log.Error("SaveOutputPdf: Could not get page inPath=%q pageNum=%d. err=%v",
 					inPath, pageNum, err)
-
-				panic(err)
 				return err
 			}
 			pageContent := l.contents[inPath][pageNum]
@@ -123,22 +116,27 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 		}
 	}
 
-	common.Log.Info("SaveOutputPdf: outPath=%q", outPath)
+	common.Log.Info("SaveOutputPdf: outPath=%q sources=%d", outPath, len(l.sources))
 
 	// Make a new PDF creator.
 	c := creator.New()
 
+	errMissing := errors.New("Missing value")
+
 	for i, src := range l.sources {
 		docContent, ok := l.contents[src.inPath]
 		if !ok {
-			panic(fmt.Errorf("%d: %+v", i, src))
+			common.Log.Error("SaveOutputPdf: Not in l.contents. %d: %+v", i, src)
+			return errMissing
 		}
 		pageContent, ok := docContent[src.pageNum]
 		if !ok {
-			panic(fmt.Errorf("%d: %+v", i, src))
+			common.Log.Error("%d: %+v", i, src)
+			return errMissing
 		}
 		if pageContent.page == nil {
-			panic(fmt.Errorf("%d: %+v", i, src))
+			common.Log.Error("%d: %+v", i, src)
+			return errMissing
 		}
 		if err := c.AddPage(pageContent.page); err != nil {
 			common.Log.Error("%d: %+v ", i, src)
@@ -151,32 +149,20 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 			common.Log.Info("@@@@ %q:%d %s", filepath.Base(src.inPath), src.pageNum, rectString(r))
 			rect := c.NewRectangle(r.Llx, h-r.Lly+shift, r.Urx-r.Llx, -(r.Ury - r.Lly + shift))
 			// rect := c.NewRectangle(r.Llx, r.Lly, r.Urx-r.Llx, r.Ury-r.Lly)
-			bbox := r
-			dx := bbox.Urx - bbox.Llx
-			dy := bbox.Ury - bbox.Lly
-			if math.Abs(dx) < extractor.MinBBox || math.Abs(dy) < extractor.MinBBox {
-				panic(fmt.Errorf("bbox=%+v dx,dy=%g,%g", bbox, dx, dy))
-			}
-			rect.SetBorderColor(creator.ColorRGBFromHex("#ffffff")) // Red border
-			rect.SetBorderWidth(3.5)                                // !@#$ For testing.
+			rect.SetBorderColor(creator.ColorRGBFromHex("#ffffff")) // White border shadow.
+			rect.SetBorderWidth(ShadowWidth)
 			if err := c.Draw(rect); err != nil {
-				panic(err)
 				return err
 			}
-			rect.SetBorderColor(creator.ColorRGBFromHex("#0000ff")) // Red border
-			rect.SetBorderWidth(3.0)                                // !@#$ For testing.
+			rect.SetBorderColor(creator.ColorRGBFromHex("#0000ff")) // Red border.
+			rect.SetBorderWidth(BorderWidth)
 			if err := c.Draw(rect); err != nil {
-				panic(err)
 				return err
 			}
 		}
 	}
 
-	err := c.WriteToFile(outPath)
-	if err != nil {
-		panic(err)
-	}
-	return err
+	return c.WriteToFile(outPath)
 }
 
 func rectString(r pdf.PdfRectangle) string {
@@ -195,7 +181,7 @@ func rectString(r pdf.PdfRectangle) string {
 // func ModifyPdfPage(inPath, outPath string, pageNumber int,
 // 	processPage func(c *creator.Creator) error) error {
 
-// 	pdfReader, err := PdfOpen(inPath)
+// 	pdfReader, err := PdfOpenFile(inPath)
 // 	if err != nil {
 // 		common.Log.Error("ModifyPdfPage: Could not open inPath=%q. err=%v", inPath, err)
 // 		return err

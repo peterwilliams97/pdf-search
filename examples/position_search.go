@@ -15,8 +15,8 @@ import (
 	"github.com/blevesearch/bleve/registry"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/highlight"
+	"github.com/peterwilliams97/pdf-search/doclib"
 	"github.com/peterwilliams97/pdf-search/serial"
-	"github.com/peterwilliams97/pdf-search/utils"
 	"github.com/unidoc/unidoc/common"
 )
 
@@ -28,13 +28,9 @@ var persistDir = "store.position"
 
 func main() {
 	flag.StringVar(&persistDir, "s", persistDir, "Bleve store name. This is a directory.")
-	utils.MakeUsage(usage)
-	utils.SetLogging()
+	doclib.MakeUsage(usage)
 	flag.Parse()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)
@@ -45,7 +41,7 @@ func main() {
 	fmt.Printf("term=%q\n", term)
 	fmt.Printf("indexPath=%q\n", indexPath)
 
-	lState, err := utils.OpenPositionsState(persistDir, false)
+	lState, err := doclib.OpenPositionsState(persistDir, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open positions store %q. err=%v\n", persistDir, err)
 		panic(err)
@@ -108,7 +104,7 @@ func main() {
 	// !!!!
 
 	const maxPages = 20 // !@#$
-	extractions := utils.CreateExtractList(maxPages)
+	extractions := doclib.CreateExtractList(maxPages)
 	for i, hit := range searchResults.Hits {
 		if i >= maxPages {
 			common.Log.Info("Terminating after %d pages", maxPages)

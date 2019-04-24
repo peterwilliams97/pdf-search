@@ -1,0 +1,33 @@
+namespace pdf_index;
+
+// DocPositions tracks the data that is used to index a PDF file.
+table DocPositions {
+	path:  string;                               // Path of input PDF file.
+	doc_idx:  uint64;                            // Index into lState.fileList.
+	// pageDpl map[uint32]serial.DocPageLocations  // !@#$ Debugging
+	// loc       serial.DocPageLocations
+	page_nums:  [uint32];
+	page_texts: [string];
+}
+
+table HashIndexPathDoc {
+	hash: string;
+	index: uint64;
+	path: string;
+	doc: DocPositions;
+}
+
+//	hashIndex  map[string]uint64        // {file hash: index into fileList}
+//	indexHash  map[uint64]string        // {index into fileList: file hash}
+//	hashPath   map[string]string        // {file hash: file path}
+//	hashDoc    map[string]*DocPositions // {file hash: DocPositions}
+
+table PdfIndex  {
+	num_files:   uint32;
+	num_pages:   uint32;
+	index :     [byte];
+	hipd:       [HashIndexPathDoc];
+}
+
+root_type PdfIndex;
+

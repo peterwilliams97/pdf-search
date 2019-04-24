@@ -9,7 +9,7 @@ import (
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/registry"
-	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/peterwilliams97/pdf-search/doclib"
 )
 
 const usage = `Usage: go run simple_search.go [OPTIONS] Adobe PDF
@@ -20,13 +20,9 @@ var persistDir = "store.simple"
 
 func main() {
 	flag.StringVar(&persistDir, "s", persistDir, "Index store directory name.")
-	utils.MakeUsage(usage)
-	utils.SetLogging()
+	doclib.MakeUsage(usage)
 	flag.Parse()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)

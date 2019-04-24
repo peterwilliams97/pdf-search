@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/peterwilliams97/pdf-search/doclib"
 )
 
 const usage = `Usage: go run concurrent_index_doc.go [OPTIONS] testdata/*.pdf
@@ -22,33 +22,29 @@ func main() {
 	flag.BoolVar(&allowAppend, "a", false, "Allow existing an Bleve index to be appended to.")
 	numWorkers := -1
 	flag.IntVar(&numWorkers, "w", numWorkers, "Number of worker threads.")
-	utils.MakeUsage(usage)
+	doclib.MakeUsage(usage)
 
 	fmt.Printf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(-1))
 	fmt.Printf("NumCPU: %d\n\n", runtime.NumCPU())
 
 	flag.Parse()
-	utils.SetLogging()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	// Read the list of PDF files that will be processed.
-	pathList, err := utils.PatternsToPaths(flag.Args(), true)
+	pathList, err := doclib.PatternsToPaths(flag.Args(), true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
 		os.Exit(1)
 	}
-	pathList = utils.CleanCorpus(pathList)
+	pathList = doclib.CleanCorpus(pathList)
 	fmt.Printf("Indexing %d PDF files.\n", len(pathList))
 
 	// Create a new index.
-	index, err := utils.CreateBleveIndex(indexPath, forceCreate, allowAppend)
+	index, err := doclib.CreateBleveIndex(indexPath, forceCreate, allowAppend)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not create Bleve index %q.\n", indexPath)
 		panic(err)
@@ -64,15 +60,15 @@ func main() {
 	fmt.Printf("%d workers\n", numWorkers)
 
 	// Create the processing queue.
-	queue := utils.NewExtractDocQueue(numWorkers)
-	resultChan := make(chan *utils.ExtractDocResult, len(pathList))
+	queue := doclib.NewExtractDocQueue(numWorkers)
+	resultChan := make(chan *doclib.ExtractDocResult, len(pathList))
 
 	// Start a go routine to feed the processing queue.
 	go func() {
 		// Create processing instructions `w` for each file in pathList and add the processing
 		// instructions to the queue.
 		for i, inPath := range pathList {
-			w := utils.NewExtractDocWork(i, inPath, resultChan)
+			w := doclib.NewExtractDocWork(i, inPath, resultChan)
 			queue.Queue(w)
 		}
 	}()

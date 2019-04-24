@@ -1,4 +1,4 @@
-package utils
+package doclib
 
 const (
 	Inch2MM    = 25.4

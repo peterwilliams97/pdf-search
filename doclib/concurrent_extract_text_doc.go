@@ -1,4 +1,4 @@
-package utils
+package doclib
 
 // NewExtractDocQueue creates a processing queue for document text extraction with `numWorkers`
 // worker go routines.

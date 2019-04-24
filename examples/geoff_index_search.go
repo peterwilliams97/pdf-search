@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/peterwilliams97/pdf-search/utils"
+	"github.com/peterwilliams97/pdf-search/doclib"
 )
 
 /*
@@ -26,25 +26,20 @@ func main() {
 	var pathPattern string
 	var inMemory = false
 	maxResults := 10
-	// utils.Debug = true // -d command line option doesn't work for this command line program !@#$
+	// doclib.Debug = true // -d command line option doesn't work for this command line program !@#$
 
 	flag.StringVar(&pathPattern, "p", pathPattern, "PDF file to index.")
 	flag.BoolVar(&inMemory, "m", inMemory, "In-memory store.")
 	flag.IntVar(&maxResults, "n", maxResults, "Max number of results to return.")
-	utils.MakeUsage(usage)
-	utils.SetLogging()
+	doclib.MakeUsage(usage)
 	flag.Parse()
-	if utils.ShowHelp {
-		flag.Usage()
-		os.Exit(0)
-	}
-
+	doclib.SetLogging()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	pathList, err := utils.PatternsToPaths([]string{pathPattern}, true)
+	pathList, err := doclib.PatternsToPaths([]string{pathPattern}, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "PatternsToPaths failed. args=%#q err=%v\n", flag.Args(), err)
 		os.Exit(1)
@@ -63,23 +58,23 @@ func main() {
 	t0 := time.Now()
 	if !inMemory {
 		persistDir := "yyy"
-		_, index, nPages, err := utils.IndexPdfs(pathList, persistDir, true, false)
+		_, index, nPages, err := doclib.IndexPdfs(pathList, persistDir, true, false)
 		if err != nil {
 			panic(err)
 		}
 		index.Close()
 		numPages = nPages
-		results, err = utils.SearchPdfIndex(persistDir, term, maxResults)
+		results, err = doclib.SearchPdfIndex(persistDir, term, maxResults)
 		if err != nil {
 			panic(err)
 		}
 	} else {
-		lState, index, nPages, err := utils.IndexPdfs(pathList, "", true, false)
+		lState, index, nPages, err := doclib.IndexPdfs(pathList, "", true, false)
 		if err != nil {
 			panic(err)
 		}
 		numPages = nPages
-		results, err = utils.SearchIndex(lState, index, term, maxResults)
+		results, err = doclib.SearchIndex(lState, index, term, maxResults)
 		if err != nil {
 			panic(err)
 		}

@@ -1,0 +1,17 @@
+namespace locations;
+
+table TextLocation {
+	offset:   uint32;
+	llx: float32;
+	lly: float32;
+	urx: float32;
+	ury: float32;
+}
+
+table DocPageLocations  {
+	doc:       uint64;
+	page:      uint32;
+	locations: [TextLocation];
+}
+
+root_type DocPageLocations;
