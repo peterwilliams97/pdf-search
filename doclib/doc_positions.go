@@ -321,7 +321,7 @@ func CreateFileDesc(inPath string, rs io.ReadSeeker) (FileDesc, error) {
 type DocPageText struct {
 	DocIdx  uint64 // Doc index (0-offset) into PositionsState.fileList .
 	PageIdx uint32 // Page index (0-offset) into DocPositions.index .
-	PageNum int    // Page number in PDF file (1-offset)
+	PageNum uint32 // Page number in PDF file (1-offset)
 	Text    string // Extracted page text.
 }
 

@@ -9,11 +9,20 @@ import (
 	"strings"
 	"time"
 
-	pdf "github.com/peterwilliams97/pdf-search"
+	psearch "github.com/peterwilliams97/pdf-search"
 	"github.com/peterwilliams97/pdf-search/doclib"
 )
 
 /*
+	This program shows how to use functions in the pdf-search library.
+
+	1) Create a bleve+PDF index with psearch.IndexPdfFiles() or psearch.IndexPdfMem()
+	2) Optionally reuse an existing on-disk bleve+PDF index with psearch.ReuseIndex
+	3) Search the bleve+PDF index with Search() or SearchMem()
+*/
+/*
+	Test results from Peter's MacBook Pro.
+	-------------------------------------
 	./index_search_example -p -f ~/testdata/adobe/PDF32000_2008.pdf  Type 1
 	[On-disk index] Duration=72.4 sec
 
@@ -46,7 +55,7 @@ func main() {
 
 	flag.StringVar(&pathPattern, "f", pathPattern, "PDF file(s) to index.")
 	flag.StringVar(&outPath, "o", outPath, "Name of PDF file that will show marked up results.")
-	flag.StringVar(&persistDir, "s", pdf.DefaultPersistDir, "The on-disk index is stored here.")
+	flag.StringVar(&persistDir, "s", psearch.DefaultPersistDir, "The on-disk index is stored here.")
 	flag.BoolVar(&memory, "m", memory, "Serialize buffers to memory.")
 	flag.BoolVar(&persist, "p", persist, "Store index on disk (slower but allows more PDF files).")
 	flag.BoolVar(&reuse, "r", reuse, "Reused stored index on disk for the last -p run.")
@@ -94,10 +103,10 @@ func main() {
 	term := strings.Join(flag.Args(), " ")
 
 	t0 := time.Now()
-	var pdfIndex pdf.PdfIndex
+	var pdfIndex psearch.PdfIndex
 	var data []byte
 	if reuse {
-		pdfIndex = pdf.ReuseIndex(persistDir)
+		pdfIndex = psearch.ReuseIndex(persistDir)
 	} else if memory {
 		var rsList []io.ReadSeeker
 		for _, inPath := range pathList {
@@ -108,12 +117,12 @@ func main() {
 			defer rs.Close()
 			rsList = append(rsList, rs)
 		}
-		data, err = pdf.IndexPdfMem(pathList, rsList, report)
+		data, err = psearch.IndexPdfMem(pathList, rsList, report)
 		if err != nil {
 			panic(err)
 		}
 	} else {
-		pdfIndex, err = pdf.IndexPdfFiles(pathList, persist, persistDir, report, useReaderSeeker)
+		pdfIndex, err = psearch.IndexPdfFiles(pathList, persist, persistDir, report, useReaderSeeker)
 		if err != nil {
 			panic(err)
 		}
@@ -122,7 +131,7 @@ func main() {
 	var results doclib.PdfMatchSet
 	dtIndex := time.Since(t0)
 	if memory {
-		results, err = pdf.SearchMem(data, term, maxSearchResults)
+		results, err = psearch.SearchMem(data, term, maxSearchResults)
 		if err != nil {
 			panic(err)
 		}
@@ -136,7 +145,6 @@ func main() {
 	dtSearch := dt - dtIndex
 
 	if nameOnly {
-		// results = results.Filter(1)
 		files := results.Files()
 		if len(files) > maxResults {
 			files = files[:maxResults]
@@ -151,7 +159,7 @@ func main() {
 		fmt.Println("=================xxx=====================")
 	}
 
-	if err = pdf.MarkupPdfResults(results, outPath); err != nil {
+	if err = psearch.MarkupPdfResults(results, outPath); err != nil {
 		panic(err)
 	}
 	fmt.Println("=================+++=====================")

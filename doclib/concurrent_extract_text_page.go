@@ -3,9 +3,9 @@ package doclib
 import "fmt"
 
 type JobCompletion struct {
-	DocID // Identifies PDF file.
-	Pages []int
-	Err   error
+	DocID    // Identifies PDF file.
+	PageNums []uint32
+	Err      error
 }
 
 // extractPageQueue is a queue of PDF processing jobs and results.
@@ -40,7 +40,7 @@ func (q *extractPageQueue) Complete(numJobs int, completeJob func(page ExtractPa
 		select {
 		case d := <-q.docDoneQueue:
 			numJobsDone++
-			numPages += len(d.Pages)
+			numPages += len(d.PageNums)
 			fmt.Printf("done=%d pages=%d -- %s\n", numJobsDone, numPages, d.DocID)
 		case p := <-q.pageDoneQueue:
 			completeJob(p)

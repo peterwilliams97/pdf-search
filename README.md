@@ -33,6 +33,15 @@ Installation (Bleve)
 	go get github.com/syndtr/goleveldb/leveldb
 	go get github.com/rcrowley/go-metrics
 
+	cd $GOPATH/src/github.com/blevesearch/
+	git clone https://github.com/peterwilliams97/bleve
+	cd bleve
+	git checkout explore.01
+
+	cd $GOPATH/src/github.com/blevesearch/
+	git clone https://github.com/peterwilliams97/blevex
+	cd blevex
+
 Installation (flatbuffers)
 --------------------------
 	brew update
@@ -41,7 +50,7 @@ Installation (flatbuffers)
 
 
 Build flatbuffers
----------------
+-----------------
 	cd $GOPATH/src/github.com/peterwilliams97/pdf-search/serial
 	flatc -g doc_page_locations.fbs
 	pushd $GOPATH/src/github.com/peterwilliams97/pdf-search/serial/cmd/locations

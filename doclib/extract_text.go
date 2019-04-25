@@ -26,36 +26,20 @@ func (id DocID) String() string {
 type PdfPage struct {
 	ID       string // Unique identifier. <file hash>.<page number>
 	Name     string // File name.
-	Page     int    // Page number.
-	Contents string // Page text.
+	PageNum  uint32 // PageNum number.
+	Contents string // PageNum text.
 }
 
 type LocPage struct {
 	ID        string // Unique identifier. <file hash>.<page number>
 	Name      string // File name.
-	Page      int    // Page number.
-	Contents  string // Page text.
+	PageNum   uint32 // PageNum number.
+	Contents  string // PageNum text.
 	Locations []extractor.TextLocation
 }
 
-// type TextLocation struct {
-// 	Offset             uint32
-// 	Llx, Lly, Urx, Ury float32
-// }
-
-// // table DocPageLocations  {
-// // 	doc:       uint64;
-// // 	page:      uint32;
-// // 	locations: [TextLocation];
-// // }
-// type DocPageLocations struct {
-// 	Doc       uint64
-// 	Page      uint32
-// 	Locations []TextLocation
-// }
-
 func (l LocPage) ToPdfPage() PdfPage {
-	return PdfPage{ID: l.ID, Name: l.Name, Page: l.Page, Contents: l.Contents}
+	return PdfPage{ID: l.ID, Name: l.Name, PageNum: l.PageNum, Contents: l.Contents}
 }
 
 // ExtractDocPages uses UniDoc to extract the text from all pages in PDF file `inPath` as a slice
@@ -68,7 +52,7 @@ func ExtractDocPages(inPath string) ([]PdfPage, error) {
 
 	var docPages []PdfPage
 
-	return docPages, ProcessPDFPagesFile(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return docPages, ProcessPDFPagesFile(inPath, func(pageNum uint32, page *pdf.PdfPage) error {
 		text, err := ExtractPageText(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
@@ -81,7 +65,7 @@ func ExtractDocPages(inPath string) ([]PdfPage, error) {
 		docPages = append(docPages, PdfPage{
 			ID:       fmt.Sprintf("%s.%d", hash[:10], pageNum),
 			Name:     filepath.Base(inPath),
-			Page:     pageNum,
+			PageNum:  pageNum,
 			Contents: text,
 		})
 		if len(docPages)%100 == 99 {
@@ -95,16 +79,16 @@ func ExtractDocPages(inPath string) ([]PdfPage, error) {
 // It sends the non-empty pages it successfully extracts to channel `docPages`.
 // It returns the page numbers of these pages so that a caller can know pages to check for
 // completion in the channel's receiver.
-func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) {
+func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]uint32, error) {
 
 	hash, err := FileHash(inPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var pagesDone []int
+	var pagesDone []uint32
 
-	return pagesDone, ProcessPDFPagesFile(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return pagesDone, ProcessPDFPagesFile(inPath, func(pageNum uint32, page *pdf.PdfPage) error {
 		text, err := ExtractPageText(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPages: ExtractPageText failed. inPath=%q pageNum=%d err=%v",
@@ -117,7 +101,7 @@ func ExtractDocPagesChan(inPath string, docPages chan<- PdfPage) ([]int, error) 
 		docPages <- PdfPage{
 			ID:       fmt.Sprintf("%s.%d", hash[:10], pageNum),
 			Name:     filepath.Base(inPath),
-			Page:     pageNum,
+			PageNum:  pageNum,
 			Contents: text,
 		}
 		pagesDone = append(pagesDone, pageNum)
@@ -138,7 +122,7 @@ func ExtractDocPagesLookup(inPath string) ([]LocPage, error) {
 
 	var docPages []LocPage
 
-	return docPages, ProcessPDFPagesFile(inPath, func(pageNum int, page *pdf.PdfPage) error {
+	return docPages, ProcessPDFPagesFile(inPath, func(pageNum uint32, page *pdf.PdfPage) error {
 		text, locations, err := ExtractPageTextLocation(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPagesLookup: ExtractPageTextLocation failed. inPath=%q pageNum=%d err=%v",
@@ -151,7 +135,7 @@ func ExtractDocPagesLookup(inPath string) ([]LocPage, error) {
 		docPages = append(docPages, LocPage{
 			ID:        fmt.Sprintf("%s.%d", hash[:10], pageNum),
 			Name:      filepath.Base(inPath),
-			Page:      pageNum,
+			PageNum:   pageNum,
 			Contents:  text,
 			Locations: locations,
 		})

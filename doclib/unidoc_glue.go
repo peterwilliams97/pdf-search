@@ -202,7 +202,7 @@ func ExtractPageTextObject(page *pdf.PdfPage) (*extractor.PageText, error) {
 
 // ProcessPDFPagesFile runs `processPage` on every page in PDF file `inPath`.
 // It can recover from errors in the libraries it calls if RecoverErrors is true.
-func ProcessPDFPagesFile(inPath string, processPage func(pageNum int, page *pdf.PdfPage) error) error {
+func ProcessPDFPagesFile(inPath string, processPage func(pageNum uint32, page *pdf.PdfPage) error) error {
 	rs, err := os.Open(inPath)
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func ProcessPDFPagesFile(inPath string, processPage func(pageNum int, page *pdf.
 }
 
 func ProcessPDFPagesReader(inPath string, rs io.ReadSeeker,
-	processPage func(pageNum int, page *pdf.PdfPage) error) error {
+	processPage func(pageNum uint32, page *pdf.PdfPage) error) error {
 
 	var err error
 	if !ExposeErrors {
@@ -241,7 +241,7 @@ func ProcessPDFPagesReader(inPath string, rs io.ReadSeeker,
 
 // processPDFPages runs `processPage` on every page in PDF file `inPath`.
 func processPDFPages(inPath string, pdfReader *pdf.PdfReader,
-	processPage func(pageNum int, page *pdf.PdfPage) error) error {
+	processPage func(pageNum uint32, page *pdf.PdfPage) error) error {
 
 	numPages, err := pdfReader.GetNumPages()
 	if err != nil {
@@ -250,8 +250,8 @@ func processPDFPages(inPath string, pdfReader *pdf.PdfReader,
 
 	common.Log.Debug("processPDFPages: inPath=%q numPages=%d", inPath, numPages)
 
-	for pageNum := 1; pageNum < numPages; pageNum++ {
-		page, err := pdfReader.GetPage(pageNum)
+	for pageNum := uint32(1); pageNum < uint32(numPages); pageNum++ {
+		page, err := pdfReader.GetPage(int(pageNum))
 		if err != nil {
 			return err
 		}

@@ -98,9 +98,6 @@ func IndexPdfReaders(pathList []string, rsList []io.ReadSeeker, persistDir strin
 		var err error
 		if len(rsList) > 0 {
 			rs := rsList[i]
-			if rs == nil {
-				panic("No rs")
-			}
 			err = indexDocPagesLocReader(index, lState, inPath, rs)
 		} else {
 			err = indexDocPagesLocFile(index, lState, inPath)
@@ -143,13 +140,6 @@ func indexDocPagesLocReader(index bleve.Index, lState *PositionsState,
 		return nil
 	}
 	common.Log.Debug("indexDocPagesLocReader: inPath=%q docPages=%d", inPath, len(docPages))
-
-	// for _, l := range docPages {
-	// 	dpl := l.ToDocPageLocations()
-	// 	if err := serial.WriteDocPageLocations(locationsFile, dpl); err != nil {
-	// 		return err
-	// 	}
-	// }
 
 	t0 := time.Now()
 	for i, l := range docPages {
@@ -409,7 +399,7 @@ func (lState *PositionsState) ExtractDocPagePositionsReader(inPath string, rs io
 
 	var docPages []DocPageText
 
-	err = ProcessPDFPagesReader(inPath, rs, func(pageNum int, page *pdf.PdfPage) error {
+	err = ProcessPDFPagesReader(inPath, rs, func(pageNum uint32, page *pdf.PdfPage) error {
 		text, locations, err := ExtractPageTextLocation(page)
 		if err != nil {
 			common.Log.Error("ExtractDocPagePositions: ExtractPageTextLocation failed. "+
@@ -427,7 +417,7 @@ func (lState *PositionsState) ExtractDocPagePositionsReader(inPath string, rs io
 			dpl.Locations = append(dpl.Locations, stl)
 		}
 
-		pageIdx, err := lDoc.AddDocPage(uint32(pageNum), dpl, text)
+		pageIdx, err := lDoc.AddDocPage(pageNum, dpl, text)
 		if err != nil {
 			return err
 		}
@@ -437,7 +427,6 @@ func (lState *PositionsState) ExtractDocPagePositionsReader(inPath string, rs io
 			PageIdx: pageIdx,
 			PageNum: pageNum,
 			Text:    text,
-			// Name:    inPath,
 		})
 		if len(docPages)%100 == 99 {
 			common.Log.Debug("  pageNum=%d docPages=%d %q", pageNum, len(docPages),

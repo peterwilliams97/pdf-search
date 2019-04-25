@@ -71,10 +71,6 @@ func main() {
 
 	fmt.Println("=================!!!=====================")
 	fmt.Printf("searchResults=%T\n", searchResults)
-	// fmt.Printf("searchResults=%s\n", searchResults)
-	// // fmt.Println("=================---=====================")
-	// // fmt.Printf("searchResults.Fields=%s\n", searchResults.Fields)
-	// fmt.Println("=================***=====================")
 	fmt.Printf("   getResults=%s\n", getResults(searchResults))
 	fmt.Println("=================+++=====================")
 	if len(searchResults.Hits) == 0 {
@@ -114,39 +110,16 @@ func main() {
 		text := hit.Fields["Text"].(string)
 		locations := hit.Locations
 		contents := locations["Text"]
-		// expl := hit.Expl
 
-		// doc, err := index.Document(id)
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		// termLocations, bestFragments, formattedFragments := highlighter.BestFragmentsInField2(hit, doc, "Text", 5)
-		// lens := make([]int, len(formattedFragments))
-		// for i, f := range formattedFragments {
-		// 	lens[i] = len(f)
-		// }
-		// fmt.Printf("##1 formattedFragments=%d %+v<<<<\n", len(formattedFragments), lens)
-		// fmt.Printf("##2 bestFragments=%d %T<<<<\n", len(bestFragments), bestFragments)
-		// for k, f := range bestFragments {
-		// 	fmt.Printf("\t%2d: %s\n\t%+q\n", k, *f, f.Snip(text))
-		// }
-		// fmt.Printf("##3 termLocations=%d %T<<<<\n", len(termLocations), termLocations)
-		// for k, f := range termLocations {
-		// 	fmt.Printf("\t%2d: %+v %+q\n", k, *f, f.Snip(text))
-		// }
-
-		fmt.Printf("===>>> %2d: id=%q hit=%T=%s %d fragments\n", i, id, hit, hit, len(hit.Fragments))
+		common.Log.Debug("===>>> %2d: id=%q hit=%T=%s %d fragments", i, id, hit, hit, len(hit.Fragments))
 		j := 0
 		for fragmentField, fragments := range hit.Fragments {
-			fmt.Printf("\t%2d: fragmentField=%q %d parts\n", j, fragmentField, len(fragments))
+			common.Log.Debug("\t%2d: fragmentField=%q %d parts", j, fragmentField, len(fragments))
 			for k, fragment := range fragments {
-				fmt.Printf("\t\t%2d: %d %+q\n", k, len(fragment), fragment)
+				common.Log.Debug("\t\t%2d: %d %+q", k, len(fragment), fragment)
 			}
 			j++
 		}
-		// fmt.Printf("==@>>> expl=%s\n", expl)
-		// fmt.Println("--------------------------------------------")
 
 		docIdx, pageIdx, err := decodeID(id)
 		if err != nil {
@@ -168,10 +141,6 @@ func main() {
 			hash, filepath.Base(inPath),
 		)
 
-		// for j, pos := range positions {
-		// 	fmt.Printf("%6d: %v\n", j, pos)
-		// }
-
 		k := 0
 		for term, termLocations := range contents {
 			fmt.Printf("--=+>> %6d: term=%q matches=%d\n", k, term, len(termLocations))
@@ -181,8 +150,7 @@ func main() {
 				snip := text[l.Start:l.End]
 				pos := getPosition(positions, uint32(l.Start), uint32(l.End))
 				common.Log.Info("*~* %9d: %d [%d:%d] %q %v", j, l.Pos, l.Start, l.End, snip, pos)
-				extractions.AddRect(inPath, int(pageNum),
-					float64(pos.Llx), float64(pos.Lly), float64(pos.Urx), float64(pos.Ury))
+				extractions.AddRect(inPath, pageNum, pos.Llx, pos.Lly, pos.Urx, pos.Ury)
 				bad := ""
 				if dx := float64(pos.Urx - pos.Llx); math.Abs(dx) > 200 {
 					bad += fmt.Sprintf("badX=%1.f", dx)
@@ -237,7 +205,6 @@ func getResults(sr *bleve.SearchResult) string {
 }
 
 func getHit(i int, hit *search.DocumentMatch) string {
-	// rv := fmt.Sprintf("%5d. %s (%f)\n", i+sr.Request.From+1, hit.ID, hit.Score)
 	rv := fmt.Sprintf(" [getHit:%d] %s (%f)\n", i, hit.ID, hit.Score)
 
 	for fragmentField, fragments := range hit.Fragments {
@@ -256,6 +223,8 @@ func getHit(i int, hit *search.DocumentMatch) string {
 	return rv
 }
 
+// getPosition returns the serial.TextLocation of the bounding box containing the text in
+// positions[s:e] where s has offset `start` and e has offset `end`.
 func getPosition(positions []serial.TextLocation, start, end uint32) serial.TextLocation {
 	i0, ok0 := getPositionIndex(positions, end)
 	i1, ok1 := getPositionIndex(positions, start)
@@ -273,6 +242,8 @@ func getPosition(positions []serial.TextLocation, start, end uint32) serial.Text
 	}
 }
 
+// getPosition returns the index of the element in `positions` with the lowest Start offset that is
+// no greater than `offset`.
 func getPositionIndex(positions []serial.TextLocation, offset uint32) (int, bool) {
 	i := sort.Search(len(positions), func(i int) bool { return positions[i].Start >= offset })
 	ok := 0 <= i && i < len(positions)
@@ -283,12 +254,15 @@ func getPositionIndex(positions []serial.TextLocation, offset uint32) (int, bool
 	return i, ok
 }
 
+// min returns the lesser of `x` and `y`.
 func min(x, y float32) float32 {
 	if x < y {
 		return x
 	}
 	return y
 }
+
+// max returns the greater of `x` and `y`.
 func max(x, y float32) float32 {
 	if x > y {
 		return x
@@ -296,7 +270,8 @@ func max(x, y float32) float32 {
 	return y
 }
 
-// id := fmt.Sprintf("%04X.%d", l.DocIdx, l.PageIdx)
+// decodeID returns DocIdx, PageIdx where
+// id := fmt.Sprintf("%04X.%d", DocIdx, PageIdx)
 func decodeID(id string) (uint64, uint32, error) {
 	parts := strings.Split(id, ".")
 	if len(parts) != 2 {

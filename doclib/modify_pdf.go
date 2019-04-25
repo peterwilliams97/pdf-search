@@ -103,7 +103,7 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 			return err
 		}
 		for pageNum := range docContents {
-			common.Log.Info("@!@# %q", inPath, pageNum)
+			common.Log.Info("SaveOutputPdf: %q %d", inPath, pageNum)
 			page, err := pdfReader.GetPage(int(pageNum))
 			if err != nil {
 				common.Log.Error("SaveOutputPdf: Could not get page inPath=%q pageNum=%d. err=%v",
@@ -146,7 +146,7 @@ func (l *ExtractList) SaveOutputPdf(outPath string) error {
 		h := pageContent.page.MediaBox.Ury
 		shift := 2.0 // !@#$ Hack to line up highlight box
 		for _, r := range pageContent.rects {
-			common.Log.Info("@@@@ %q:%d %s", filepath.Base(src.inPath), src.pageNum, rectString(r))
+			common.Log.Info("SaveOutputPdf: %q:%d %s", filepath.Base(src.inPath), src.pageNum, rectString(r))
 			rect := c.NewRectangle(r.Llx, h-r.Lly+shift, r.Urx-r.Llx, -(r.Ury - r.Lly + shift))
 			// rect := c.NewRectangle(r.Llx, r.Lly, r.Urx-r.Llx, r.Ury-r.Lly)
 			rect.SetBorderColor(creator.ColorRGBFromHex("#ffffff")) // White border shadow.

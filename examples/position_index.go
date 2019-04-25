@@ -36,14 +36,16 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "Total of %d PDF files.\n", len(pathList))
 	pathList = doclib.CleanCorpus(pathList)
-	if len(pathList) > 5860 { // !@#$
-		pathList = pathList[5860:]
-	}
-	lState, index, err := doclib.IndexPdfs(pathList, persistDir, forceCreate, allowAppend)
+	lState, index, totalPages, err := doclib.IndexPdfFiles(pathList, persistDir, forceCreate, allowAppend, report)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Fprintf(os.Stderr, "lState=%+v\n", *lState)
 	fmt.Fprintf(os.Stderr, "index=%+v\n", index)
+	fmt.Fprintf(os.Stderr, "totalPages=%d\n", totalPages)
 	fmt.Fprintf(os.Stderr, "persistDir=%q\n", persistDir)
+}
+
+func report(msg string) {
+	fmt.Fprintf(os.Stderr, ">> %s\n", msg)
 }
