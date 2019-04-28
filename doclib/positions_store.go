@@ -131,6 +131,8 @@ func indexDocPagesLocFile(index bleve.Index, lState *PositionsState, inPath stri
 	return indexDocPagesLocReader(index, lState, inPath, rs)
 }
 
+// indexDocPagesLocReader updates `index` and `lState` with the text positions of the text in the
+// PDF file accessed by `rs`. `inPath` is the name of the PDF file.
 func indexDocPagesLocReader(index bleve.Index, lState *PositionsState,
 	inPath string, rs io.ReadSeeker) error {
 
@@ -382,7 +384,7 @@ func (lState *PositionsState) ExtractDocPagePositions(inPath string) ([]DocPageT
 
 // ExtractDocPagePositionsReader extracts the text of the PDF file referenced by `rs`.
 // It returns the text as a DocPageText per page.
-// The DocPageText refer to DocPositions which are stored in lState.hashDoc which is updated in
+// The []DocPageText refer to DocPositions which are stored in lState.hashDoc which is updated in
 // this function.
 func (lState *PositionsState) ExtractDocPagePositionsReader(inPath string, rs io.ReadSeeker) (
 	[]DocPageText, error) {

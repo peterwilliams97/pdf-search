@@ -21,17 +21,24 @@ var (
 )
 
 const (
-	licenseKey = ``
-	company    = "..."
+	// Otherwise text is truncated and a watermark added to the text.
+	// License keys are available via: https://unidoc.io
+	uniDocLicenseKey = `
+-----BEGIN UNIDOC LICENSE KEY-----
+....
+-----END UNIDOC LICENSE KEY-----
+`
+	companyName = "(Your company)"
+	creatorName = "PDF Searcg"
 )
 
 // init sets up UniDoc licensing and logging.
 func init() {
-	err := license.SetLicenseKey(licenseKey, company)
+	err := license.SetLicenseKey(uniDocLicenseKey, companyName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading UniDoc license: %v\n", err)
 	}
-	pdf.SetPdfCreator("PDF Search")
+	pdf.SetPdfCreator(creatorName)
 
 	flag.BoolVar(&Debug, "d", false, "Print debugging information.")
 	flag.BoolVar(&Trace, "e", false, "Print detailed debugging information.")
@@ -170,20 +177,20 @@ func PageSizePt(page *pdf.PdfPage) (width, height float64, err error) {
 
 // ExtractPageText returns the text on page `page`.
 func ExtractPageText(page *pdf.PdfPage) (string, error) {
-	textList, err := ExtractPageTextObject(page)
+	pageText, err := ExtractPageTextObject(page)
 	if err != nil {
 		return "", err
 	}
-	return textList.ToText(), nil
+	return pageText.ToText(), nil
 }
 
 // ExtractPageTextLocation returns the locations of text on page `page`.
 func ExtractPageTextLocation(page *pdf.PdfPage) (string, []extractor.TextLocation, error) {
-	textList, err := ExtractPageTextObject(page)
+	pageText, err := ExtractPageTextObject(page)
 	if err != nil {
 		return "", nil, err
 	}
-	text, locations := textList.ToTextLocation()
+	text, locations := pageText.ToTextLocation()
 	return text, locations, nil
 }
 
