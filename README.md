@@ -7,14 +7,14 @@ Main Example Program
 `examples/index_search_example.go`
 
 This program shows how to use the APIs in `index_search.go` to
-* create indexes over PDF files
-* search those indexes using full-text search
-* mark up PDF files with the locations of the search matches on pages
+* create indexes over PDF files,
+* search those indexes using full-text search, and
+* mark up PDF files with the locations of the search matches on pages.
 
 It has 3 types of index
-* on-disk. These can be as large as your disk but are slower.
-* in-memory with the index stored in a Go struct. Faster but limited to (virual) memory size.
-* in-memory with the index serialized to a []byte. Useful for non-Go callers such as web apps.
+* On-disk. These can be as large as your disk but are slower.
+* In-memory with the index stored in a Go struct. Faster but limited to (virtual) memory size.
+* In-memory with the index serialized to a []byte. Useful for non-Go callers such as web apps.
 
 Other Example Programs
 ---------------------
