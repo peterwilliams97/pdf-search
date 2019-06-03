@@ -29,7 +29,7 @@ const (
 -----END UNIDOC LICENSE KEY-----
 `
 	companyName = "(Your company)"
-	creatorName = "PDF Searcg"
+	creatorName = "PDF Search"
 )
 
 // init sets up UniDoc licensing and logging.
